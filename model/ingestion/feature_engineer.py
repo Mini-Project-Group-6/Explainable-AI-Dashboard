@@ -1,0 +1,373 @@
+"""18 rubric-aligned features from a segmented lesson plan.
+
+Implements ``docs/FEATURES.md`` (v0.1 draft). Input is a
+``LessonPlanText`` from ``ingestion/extract_text.py``; output is an
+ordered 18-value feature vector whose names are the exact columns used
+by the XGBoost scorer and shown in SHAP waterfall plots.
+
+Design decisions carried over from FEATURES.md:
+- F13 uses lemma-overlap cosine similarity (open question 1, option (a))
+  because en_core_web_sm ships no word vectors.
+- F17 is returned RAW here; z-scoring against the training corpus happens
+  in the training pipeline (scoring/train_xgboost.py stores mean/std).
+- Missing-section policy: features of a missing section default to 0.
+- Everything is deterministic.
+"""
+
+from __future__ import annotations
+
+import math
+import re
+from collections import Counter
+from typing import Iterable, Optional
+
+from ingestion.extract_text import MAIN_STAGES, LessonPlanText
+
+# Exact SHAP-facing column order — do not reorder without retraining.
+FEATURE_NAMES: list[str] = [
+    "objective_count",              # F1
+    "smart_objective_count",        # F2
+    "objective_measurability_ratio",  # F3
+    "bloom_remember_prop",          # F4
+    "bloom_understand_prop",        # F5
+    "bloom_apply_prop",             # F6
+    "bloom_analyze_prop",           # F7
+    "bloom_evaluate_prop",          # F8
+    "bloom_create_prop",            # F9
+    "content_activity_ratio",       # F10
+    "learner_activity_verb_density",  # F11
+    "activity_variety_count",       # F12
+    "assessment_alignment_score",   # F13
+    "assessment_item_count",        # F14
+    "time_allocation_coverage",     # F15
+    "time_total_consistency",       # F16
+    "sentence_complexity_index",    # F17 (raw; z-scored at training time)
+    "readability_flesch",           # F18
+]
+
+# --- Lexicons (FEATURES.md Appendix A; UK + US spellings, stored as lemmas) ---
+
+BLOOM_LEVELS = ("remember", "understand", "apply", "analyze", "evaluate", "create")
+
+BLOOM_VERBS: dict[str, frozenset[str]] = {
+    "remember": frozenset({
+        "define", "list", "name", "state", "recall", "identify", "label",
+        "match", "recognise", "recognize", "select"}),
+    "understand": frozenset({
+        "explain", "describe", "summarise", "summarize", "classify", "discuss",
+        "interpret", "paraphrase", "illustrate", "compare", "outline"}),
+    "apply": frozenset({
+        "apply", "use", "solve", "demonstrate", "calculate", "complete",
+        "show", "implement", "practise", "practice", "sketch"}),
+    "analyze": frozenset({
+        "analyse", "analyze", "differentiate", "distinguish", "examine",
+        "organise", "organize", "contrast", "categorise", "categorize",
+        "investigate", "deconstruct"}),
+    "evaluate": frozenset({
+        "evaluate", "justify", "critique", "judge", "defend", "argue",
+        "assess", "appraise", "recommend"}),
+    "create": frozenset({
+        "create", "design", "construct", "compose", "develop", "formulate",
+        "plan", "produce", "invent", "generate"}),
+}
+
+MEASURABLE_VERBS: frozenset[str] = frozenset().union(*BLOOM_VERBS.values())
+
+# Non-measurable — excluded from SMART (single-word lemmas checked on tokens,
+# multi-word phrases checked on the sentence text).
+VAGUE_VERBS = frozenset({"know", "understand", "learn", "appreciate", "grasp"})
+VAGUE_PHRASES = ("be aware of", "be familiar with")
+
+INSTRUCTIONAL_VERBS = MEASURABLE_VERBS | VAGUE_VERBS
+
+# F11 — learner-centred activity verbs (lemmas)
+LEARNER_ACTIVITY_VERBS = frozenset({
+    "discuss", "demonstrate", "present", "solve", "practise", "practice",
+    "group", "role-play", "brainstorm", "share", "explore", "measure",
+    "draw", "act", "perform", "collaborate", "observe", "experiment"})
+
+# F12 — activity-type taxonomy (type -> trigger keywords, lower-cased substrings)
+ACTIVITY_TAXONOMY: dict[str, tuple[str, ...]] = {
+    "discussion": ("discuss", "debate", "brainstorm"),
+    "group_work": ("group work", "in groups", "pair", "team"),
+    "demonstration": ("demonstrat",),
+    "practice": ("practice", "practise", "exercise", "drill", "solve"),
+    "questioning": ("question", "ask", "quiz"),
+    "ict_tlm": ("ict", "computer", "projector", "video", "chart", "tlm",
+                "teaching learning material", "flashcard", "model"),
+    "role_play": ("role play", "role-play", "drama", "act out"),
+    "field_observation": ("field", "observation", "excursion", "nature walk"),
+}
+
+# F2 — condition/criterion markers for SMART detection
+_CRITERION_WORDS = frozenset({
+    "correctly", "accurately", "clearly", "successfully", "appropriately",
+    "independently", "fluently"})
+_CRITERION_PHRASES = ("at least", "at most", "without", "using", "given",
+                      "with the aid of", "within")
+
+_TIME_RE = re.compile(r"\b(\d+)\s*(?:minutes|mins?)\b", re.IGNORECASE)
+_NUMBERED_ITEM_RE = re.compile(r"^\s*(?:\d+[\.\)]|[a-z][\.\)]|[ivx]+[\.\)])\s+",
+                               re.IGNORECASE | re.MULTILINE)
+
+
+def load_nlp():
+    """Load the pinned spaCy pipeline (proposal Part D2)."""
+    import spacy
+
+    return spacy.load("en_core_web_sm")
+
+
+class FeatureEngineer:
+    """Turns one ``LessonPlanText`` into the 18-value feature vector."""
+
+    def __init__(self, nlp=None):
+        self.nlp = nlp or load_nlp()
+
+    # -- public API ---------------------------------------------------------
+
+    def extract_features(self, plan: LessonPlanText) -> dict[str, float]:
+        """Ordered dict of the 18 features, keys == FEATURE_NAMES."""
+        objectives_doc = self._doc(plan.sections.get("objectives", ""))
+        activities_doc = self._doc(plan.sections.get("activities", ""))
+        assessment_doc = self._doc(plan.sections.get("assessment", ""))
+        content_text = plan.sections.get("content", "")
+        full_doc = self._doc(plan.raw_text)
+
+        features: dict[str, float] = {}
+        features.update(self._objective_features(objectives_doc))          # F1–F3
+        features.update(self._bloom_features(objectives_doc, activities_doc))  # F4–F9
+        features["content_activity_ratio"] = self._content_activity_ratio(     # F10
+            content_text, plan.sections.get("activities", ""))
+        features["learner_activity_verb_density"] = (                      # F11
+            self._activity_verb_density(activities_doc))
+        features["activity_variety_count"] = self._activity_variety(      # F12
+            plan.sections.get("activities", ""))
+        features["assessment_alignment_score"] = self._lemma_overlap(     # F13
+            objectives_doc, assessment_doc)
+        features["assessment_item_count"] = self._assessment_items(       # F14
+            plan.sections.get("assessment", ""), assessment_doc)
+        features["time_allocation_coverage"] = self._time_coverage(plan)  # F15
+        features["time_total_consistency"] = self._time_consistency(plan)  # F16
+        features["sentence_complexity_index"] = self._complexity(full_doc)  # F17
+        features["readability_flesch"] = self._flesch(full_doc)           # F18
+
+        return {name: float(features[name]) for name in FEATURE_NAMES}
+
+    def to_vector(self, plan: LessonPlanText) -> list[float]:
+        return list(self.extract_features(plan).values())
+
+    # -- helpers ------------------------------------------------------------
+
+    def _doc(self, text: str):
+        return self.nlp(text) if text else self.nlp("")
+
+    @staticmethod
+    def _objective_units(doc) -> list:
+        """One unit per bullet line or sentence in the objectives section."""
+        text = doc.text
+        lines = [ln.strip(" \t-•*") for ln in text.splitlines() if ln.strip(" \t-•*")]
+        # Bullet-per-line layout if most lines are short; else sentence-split.
+        if len(lines) >= 2:
+            return lines
+        return [s.text.strip() for s in doc.sents if s.text.strip()]
+
+    def _objective_features(self, objectives_doc) -> dict[str, float]:
+        units = self._objective_units(objectives_doc)
+        count = 0
+        smart = 0
+        for unit in units:
+            unit_doc = self.nlp(unit)
+            lemmas = {t.lemma_.lower() for t in unit_doc}
+            lower = unit.lower()
+            is_objective = bool(lemmas & INSTRUCTIONAL_VERBS) or any(
+                p in lower for p in VAGUE_PHRASES)
+            if not is_objective:
+                continue
+            count += 1
+            if self._is_smart(unit_doc, lemmas, lower):
+                smart += 1
+        return {
+            "objective_count": count,
+            "smart_objective_count": smart,
+            "objective_measurability_ratio": smart / max(count, 1),
+        }
+
+    @staticmethod
+    def _is_smart(unit_doc, lemmas: set[str], lower: str) -> bool:
+        measurable = bool(lemmas & MEASURABLE_VERBS)
+        if not measurable:
+            return False
+        has_number = any(t.like_num for t in unit_doc)
+        has_criterion = (
+            has_number
+            or bool(lemmas & _CRITERION_WORDS)
+            or any(p in lower for p in _CRITERION_PHRASES))
+        return has_criterion
+
+    def _bloom_features(self, objectives_doc, activities_doc) -> dict[str, float]:
+        counts = Counter()
+        for doc in (objectives_doc, activities_doc):
+            for token in doc:
+                if token.pos_ != "VERB":
+                    continue
+                lemma = token.lemma_.lower()
+                for level, verbs in BLOOM_VERBS.items():
+                    if lemma in verbs:
+                        counts[level] += 1
+                        break
+        total = sum(counts.values())
+        return {
+            f"bloom_{level}_prop": (counts[level] / total if total else 0.0)
+            for level in BLOOM_LEVELS
+        }
+
+    @staticmethod
+    def _content_activity_ratio(content: str, activities: str) -> float:
+        # Missing-section policy: either side absent -> 0.
+        if not content.strip() or not activities.strip():
+            return 0.0
+        ratio = len(content.split()) / max(len(activities.split()), 1)
+        return min(ratio, 5.0)
+
+    @staticmethod
+    def _activity_verb_density(activities_doc) -> float:
+        tokens = [t for t in activities_doc if not t.is_space]
+        if not tokens:
+            return 0.0
+        hits = sum(1 for t in tokens
+                   if t.lemma_.lower() in LEARNER_ACTIVITY_VERBS)
+        return hits / len(tokens) * 100.0
+
+    @staticmethod
+    def _activity_variety(activities_text: str) -> int:
+        lower = activities_text.lower()
+        return sum(1 for keywords in ACTIVITY_TAXONOMY.values()
+                   if any(k in lower for k in keywords))
+
+    @staticmethod
+    def _lemma_overlap(objectives_doc, assessment_doc) -> float:
+        """F13 — cosine similarity of content-word lemma counts (tf overlap).
+
+        Lexical stand-in for vector similarity; see FEATURES.md open
+        question 1 (en_core_web_sm has no word vectors).
+        """
+        def bag(doc) -> Counter:
+            return Counter(
+                t.lemma_.lower() for t in doc
+                if t.is_alpha and not t.is_stop)
+
+        a, b = bag(objectives_doc), bag(assessment_doc)
+        if not a or not b:
+            return 0.0
+        dot = sum(count * b[lemma] for lemma, count in a.items())
+        norm = math.sqrt(sum(c * c for c in a.values())) * \
+            math.sqrt(sum(c * c for c in b.values()))
+        return dot / norm if norm else 0.0
+
+    def _assessment_items(self, assessment_text: str, assessment_doc) -> int:
+        numbered = len(_NUMBERED_ITEM_RE.findall(assessment_text))
+        interrogative = 0
+        imperative = 0
+        for sent in assessment_doc.sents:
+            text = sent.text.strip()
+            if not text:
+                continue
+            if text.endswith("?"):
+                interrogative += 1
+                continue
+            first = next((t for t in sent if not t.is_punct and not t.is_space), None)
+            if first is not None and first.lemma_.lower() in MEASURABLE_VERBS:
+                imperative += 1
+        # Numbered items usually contain the question/instruction itself:
+        # take the larger of layout-based and sentence-based counts.
+        return max(numbered, interrogative + imperative)
+
+    @staticmethod
+    def _time_coverage(plan: LessonPlanText) -> float:
+        with_time = sum(
+            1 for stage in MAIN_STAGES
+            if _TIME_RE.search(plan.sections.get(stage, "")))
+        return with_time / len(MAIN_STAGES)
+
+    @staticmethod
+    def _time_consistency(plan: LessonPlanText) -> float:
+        stated = plan.stated_duration_minutes
+        if not stated:
+            return 0.0
+        total = sum(
+            int(m.group(1))
+            for stage in MAIN_STAGES
+            for m in _TIME_RE.finditer(plan.sections.get(stage, "")))
+        if total == 0:
+            return 0.0
+        relative_error = abs(total - stated) / stated
+        return max(0.0, 1.0 - relative_error / 0.5)  # off by >=50% -> 0
+
+    @staticmethod
+    def _parse_depth(token) -> int:
+        # Compare indices, not identity: spaCy builds a fresh Token object on
+        # every .head access, so `head is token` never holds at the root.
+        depth = 0
+        while token.head.i != token.i:
+            token = token.head
+            depth += 1
+        return depth
+
+    def _complexity(self, full_doc) -> float:
+        """F17 raw value: mean sentence length x mean parse-tree depth."""
+        sents = [s for s in full_doc.sents
+                 if sum(1 for t in s if not t.is_space and not t.is_punct) >= 3]
+        if not sents:
+            return 0.0
+        lengths, depths = [], []
+        for sent in sents:
+            tokens = [t for t in sent if not t.is_space and not t.is_punct]
+            lengths.append(len(tokens))
+            depths.append(max((self._parse_depth(t) for t in tokens), default=0))
+        return (sum(lengths) / len(lengths)) * (sum(depths) / len(depths))
+
+    def _flesch(self, full_doc) -> float:
+        words = [t for t in full_doc if t.is_alpha]
+        sents = [s for s in full_doc.sents if any(t.is_alpha for t in s)]
+        if not words or not sents:
+            return 0.0
+        syllables = sum(_count_syllables(t.text) for t in words)
+        return (206.835
+                - 1.015 * (len(words) / len(sents))
+                - 84.6 * (syllables / len(words)))
+
+
+def _count_syllables(word: str) -> int:
+    """Rule-based English syllable count (no extra dependency)."""
+    word = word.lower()
+    if len(word) <= 3:
+        return 1
+    if word.endswith("e") and not word.endswith(("le", "ee")):
+        word = word[:-1]
+    groups = re.findall(r"[aeiouy]+", word)
+    return max(1, len(groups))
+
+
+def features_dataframe(plans: Iterable[LessonPlanText], nlp=None):
+    """Feature matrix for a batch of plans (rows follow input order)."""
+    import pandas as pd
+
+    engineer = FeatureEngineer(nlp)
+    rows = [engineer.extract_features(p) for p in plans]
+    return pd.DataFrame(rows, columns=FEATURE_NAMES)
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+
+    from ingestion.extract_text import extract
+
+    parser = argparse.ArgumentParser(description="Extract the 18-feature vector from a lesson plan")
+    parser.add_argument("path", help="Path to a .pdf or .docx lesson plan")
+    args = parser.parse_args()
+
+    plan = extract(args.path)
+    engineer = FeatureEngineer()
+    print(json.dumps(engineer.extract_features(plan), indent=2))
