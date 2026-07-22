@@ -1,0 +1,26 @@
+# S1 ML pipeline dependencies — versions pinned per proposal Part D5
+# Python 3.11.9, CPU-only, offline at inference time
+
+# Core ML
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+xgboost==1.7.6
+shap==0.44.0
+matplotlib==3.8.4
+
+# NLP / ingestion
+spacy==3.7.4
+pymupdf==1.24.5
+python-docx==1.1.2
+
+# BERT + LoRA (CPU-only)
+torch==2.3.0
+transformers==4.40.1
+peft==0.11.1
+accelerate==0.30.1
+datasets==2.19.1
+
+# Utilities
+joblib==1.4.2
+tqdm==4.66.4
