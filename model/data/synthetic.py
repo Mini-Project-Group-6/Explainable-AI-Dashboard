@@ -4,14 +4,16 @@ Implements the proposal's synthetic data plan (Part D2 + risk register
 G2/R1-R2): until the 40-60 real annotated CoE lesson plans arrive, training
 runs on template-augmented GES-format plans with *known* rubric scores.
 
-Each plan is generated from a quality profile — one 0-4 score per GES/NCTE
-rubric dimension — and the text is rendered so that the weaknesses a low
+Each plan is generated from a quality profile — one 1-4 score per rubric
+dimension — and the text is rendered so that the weaknesses a low
 score implies are actually present in the document (vague objectives, no
 time allocations, thin assessment, ...). The profile is the label.
 
-Dimensions (order fixed, mirrors docs/FEATURES.md):
-    D1 objectives, D2 content, D3 methods, D4 assessment,
-    D5 language, D6 time_management
+Dimensions (order fixed, mirrors rubric_specification.pdf):
+    learning_outcomes, pedagogical_content_knowledge, teaching_learning_strategies,
+    resources_including_ict, assessment_strategies_in_plan, lesson_introduction_rpk,
+    lesson_sequencing, attention_to_all_learners, concept_explanation_examples,
+    lesson_closure
 
 Deterministic per seed. Synthetic plans must be labelled as synthetic in any
 reported dataset (proposal D2) — the output manifest records this.
@@ -24,9 +26,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-RUBRIC_DIMENSIONS = [
-    "objectives", "content", "methods", "assessment", "language", "time_management",
-]
+from rubric_schema import RUBRIC_DIMENSIONS, validate_scores
 
 # --- Topic bank: content words are shared between objectives, core points and
 # --- assessment so that alignment (F13) is controllable per plan.
@@ -101,19 +101,19 @@ class SyntheticPlan:
     topic: str
 
 
-def _objectives_block(rng, score: int, keywords: list[str]) -> str:
-    n_objectives = [1, 2, 3, 3, 4][score]
-    n_smart = [0, 0, 1, 2, n_objectives][score]
+def _objectives_block(rng, score: int, keywords: list[str], topic: str) -> str:
+    if score == 1:
+        return "OBJECTIVES:\nTeacher explains the lesson topic."
     lines = ["OBJECTIVES:", "By the end of the lesson, the learner will be able to:"]
-    for i in range(n_objectives):
-        kw = keywords[i % len(keywords)]
-        if i < n_smart:
-            verb = rng.choice(MEASURABLE_VERBS)
-            crit = rng.choice(CRITERIA)
-            lines.append(f"- {verb} {crit} facts about {kw}")
-        else:
-            verb = rng.choice(VAGUE_VERBS if score < 3 else MEASURABLE_VERBS)
-            lines.append(f"- {verb} {kw}")
+    if score >= 4:
+        lines.append(f"- {rng.choice(MEASURABLE_VERBS)} a curriculum indicator for {topic} using {rng.choice(CRITERIA)} evidence")
+        lines.append(f"- {rng.choice(MEASURABLE_VERBS)} the key idea of {keywords[0]} in one lesson")
+        lines.append(f"- {rng.choice(MEASURABLE_VERBS)} {keywords[1 % len(keywords)]} with a clear example")
+    elif score == 3:
+        lines.append(f"- {rng.choice(MEASURABLE_VERBS)} the main idea of {keywords[0]}")
+        lines.append(f"- {rng.choice(MEASURABLE_VERBS)} {keywords[1 % len(keywords)]}")
+    else:
+        lines.append(f"- {rng.choice(VAGUE_VERBS)} {keywords[0]}")
     return "\n".join(lines)
 
 
@@ -126,6 +126,94 @@ def _content_block(rng, score: int, topic: str, keywords: list[str]) -> str:
             f"{topic} involves {kw}. "
             f"Learners should note that {kw} is a key point of today's lesson.")
     return "\n".join(lines)
+
+
+def _resources_block(score: int, keywords: list[str]) -> str:
+    if score == 1:
+        return "RESOURCES:\nNone listed."
+    if score == 2:
+        return "RESOURCES:\nTextbook, chalkboard, exercise book."
+    if score == 3:
+        return (
+            "RESOURCES:\n"
+            f"Flashcards for {keywords[0]}; chart paper for group work; textbook for reference."
+        )
+    return (
+        "RESOURCES:\n"
+        f"Locally made flashcards for {keywords[0]}; chart paper for class recording; "
+        "real objects or pictures for demonstration; a projector or phone image where ICT is available."
+    )
+
+
+def _differentiation_block(score: int) -> str:
+    if score == 1:
+        return "DIFFERENTIATION:\nNo reference to differing learner needs."
+    if score == 2:
+        return "DIFFERENTIATION:\nSlower learners will be helped."
+    if score == 3:
+        return "DIFFERENTIATION:\nA support task and an extension task are provided for different ability levels."
+    return (
+        "DIFFERENTIATION:\n"
+        "Below-level learners get scaffolded task cards; above-level learners get an extension task; "
+        "learners with special educational needs receive targeted support; participation is shared fairly across gender."
+    )
+
+
+def _explanation_block(score: int, keywords: list[str]) -> str:
+    if score == 1:
+        return "EXPLANATION STRATEGY:\nTeacher talks through the topic."
+    if score == 2:
+        return f"EXPLANATION STRATEGY:\nExamples are textbook-bound and generic for {keywords[0]}."
+    if score == 3:
+        return f"EXPLANATION STRATEGY:\nTeacher uses familiar examples to explain {keywords[0]} clearly."
+    return (
+        "EXPLANATION STRATEGY:\n"
+        f"Teacher uses an analogy, diagram, and demonstration from the Ghanaian classroom context to explain {keywords[0]}."
+    )
+
+
+def _intro_block(score: int, topic: str, keywords: list[str]) -> str:
+    if score == 1:
+        return "INTRODUCTION:\nNo starter or introduction phase."
+    if score == 2:
+        return f"INTRODUCTION:\nTeacher reviews previous lesson content on {keywords[-1]}."
+    if score == 3:
+        return (
+            "INTRODUCTION:\n"
+            f"Teacher reviews learners' prior knowledge on {keywords[-1]} and connects it to {topic}."
+        )
+    return (
+        "INTRODUCTION:\n"
+        f"Teacher uses a brief hook, reviews prior knowledge on {keywords[-1]}, connects it to {topic}, and shares the objective with learners."
+    )
+
+
+def _sequencing_block(score: int, with_time: bool) -> str:
+    if score == 1:
+        return "SEQUENCING:\nNo discernible phase structure."
+    if score == 2:
+        return "SEQUENCING:\nA phase is missing and timings are absent."
+    if score == 3:
+        prefix = "SEQUENCING:\nStarter, main, and plenary are present and ordered."
+        if with_time:
+            prefix += " Timings are allocated."
+        return prefix
+    prefix = (
+        "SEQUENCING:\nStarter, main, and plenary all present with coherent progression; each activity builds on the previous; timings are realistic and balanced."
+    )
+    if with_time:
+        prefix += " Phase timings are shown throughout."
+    return prefix
+
+
+def _closure_block(score: int) -> str:
+    if score == 1:
+        return "CLOSURE:\nNo plenary or closure."
+    if score == 2:
+        return "CLOSURE:\nTeacher summary only."
+    if score == 3:
+        return "CLOSURE:\nPlenary is present and summarizes the lesson."
+    return "CLOSURE:\nPlenary consolidates the indicator, learners summarize key points, and closing questions check attainment."
 
 
 def _activities_block(rng, score: int, keywords: list[str], with_time: bool) -> str:
@@ -156,6 +244,19 @@ def _assessment_block(rng, score: int, keywords: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _pedagogical_content_block(score: int, keywords: list[str]) -> str:
+    if score == 1:
+        return "PCK:\nThe plan contains a factual or conceptual error, or content is absent."
+    if score == 2:
+        return f"PCK:\nContent is broadly correct but thin and generic for {keywords[0]}."
+    if score == 3:
+        return f"PCK:\nContent is accurate and appropriate to grade level with worked examples for {keywords[0]}."
+    return (
+        "PCK:\n"
+        f"Content is accurate throughout, anticipates common misconceptions for {keywords[0]}, and includes pitched worked examples."
+    )
+
+
 def _apply_language_quality(rng, text: str, score: int) -> str:
     if score >= 3:
         return text
@@ -175,22 +276,23 @@ def generate_plan(rng: random.Random, plan_id: str,
     if scores is None:
         # Correlated profile: plans tend to be coherently weak/average/strong,
         # with per-dimension jitter so dimensions stay separable.
-        base = rng.choice([0, 1, 2, 2, 3, 3, 4])
+        base = rng.choice([1, 2, 2, 3, 3, 4])
         scores = {
-            d: min(4, max(0, base + rng.choice([-1, 0, 0, 1])))
+            d: min(4, max(1, base + rng.choice([-1, 0, 0, 1])))
             for d in RUBRIC_DIMENSIONS
         }
+
+    validate_scores(scores)
 
     subject = rng.choice(list(TOPICS))
     topic, keywords = rng.choice(TOPICS[subject])
     kws = list(keywords)
     rng.shuffle(kws)
 
-    time_score = scores["time_management"]
-    with_time = time_score >= 2
+    with_time = scores["lesson_sequencing"] >= 3
     duration = rng.choice([60, 70, 80])
-    # Stated vs allocated consistency degrades with the time score.
-    stated = duration if time_score >= 3 else int(duration * rng.choice([1.5, 0.6]))
+    # Stated vs allocated consistency degrades with the sequencing score.
+    stated = duration if scores["lesson_sequencing"] >= 3 else int(duration * rng.choice([1.5, 0.6]))
 
     header = "\n".join([
         f"SUBJECT: {subject}",
@@ -200,30 +302,23 @@ def generate_plan(rng: random.Random, plan_id: str,
         f"CLASS SIZE: {rng.randint(25, 55)}",
     ])
 
-    intro_time = f"({rng.choice([5, 10])} minutes) " if with_time else ""
-    introduction = ("INTRODUCTION:\n"
-                    + intro_time
-                    + f"Teacher reviews learners' relevant previous knowledge on {kws[-1]} "
-                      "through question and answer.")
-    rpk = f"R.P.K.:\nLearners have already been taught {kws[-1]} in the previous lesson."
-
-    closure_time = f"({rng.choice([5, 10])} minutes) " if with_time else ""
-    closure = ("CLOSURE:\n"
-               + closure_time
-               + "Teacher summarises the main points of the lesson and learners "
-                 "ask questions for clarification.")
+    language_quality = int(round(sum(scores[d] for d in RUBRIC_DIMENSIONS) / len(RUBRIC_DIMENSIONS)))
 
     parts = [
         header,
-        rpk,
-        _objectives_block(rng, scores["objectives"], kws),
-        introduction,
-        _content_block(rng, scores["content"], topic, kws),
-        _activities_block(rng, scores["methods"], kws, with_time),
-        _assessment_block(rng, scores["assessment"], kws),
-        closure,
+        _objectives_block(rng, scores["learning_outcomes"], kws, topic),
+        _pedagogical_content_block(scores["pedagogical_content_knowledge"], kws),
+        _resources_block(scores["resources_including_ict"], kws),
+        _intro_block(scores["lesson_introduction_rpk"], topic, kws),
+        _content_block(rng, scores["pedagogical_content_knowledge"], topic, kws),
+        _activities_block(rng, scores["teaching_learning_strategies"], kws, with_time),
+        _assessment_block(rng, scores["assessment_strategies_in_plan"], kws),
+        _differentiation_block(scores["attention_to_all_learners"]),
+        _explanation_block(scores["concept_explanation_examples"], kws),
+        _sequencing_block(scores["lesson_sequencing"], with_time),
+        _closure_block(scores["lesson_closure"]),
     ]
-    text = _apply_language_quality(rng, "\n\n".join(parts), scores["language"])
+    text = _apply_language_quality(rng, "\n\n".join(parts), language_quality)
     return SyntheticPlan(plan_id=plan_id, text=text, scores=scores,
                          subject=subject, topic=topic)
 

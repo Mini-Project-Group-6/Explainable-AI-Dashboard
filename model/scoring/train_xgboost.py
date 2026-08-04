@@ -1,9 +1,9 @@
-"""Train the XGBoost rubric scorer (proposal Part D3).
+"""Train the XGBoost rubric scorer (rubric specification v2).
 
-One XGBoost regressor per GES/NCTE rubric dimension, trained on the
-18-feature vectors from ``ingestion/feature_engineer.py``. Regression +
-rounding is used (standard AES practice for ordinal 0-4 rubric scores and
-what quadratic-weighted Kappa expects); predictions are clipped to [0, 4].
+One XGBoost regressor per rubric criterion, trained on the feature vectors
+from ``ingestion/feature_engineer.py``. Regression + rounding is used
+(standard AES practice for ordinal 1-4 rubric scores and what quadratic-
+weighted Kappa expects); predictions are clipped to [1, 4].
 
 Hyperparameters are pinned by proposal D3:
     n_estimators=200, max_depth=6, learning_rate=0.05,
@@ -32,12 +32,9 @@ import pandas as pd
 
 from ingestion.extract_text import LessonPlanText, parse_stated_duration, segment_sections
 from ingestion.feature_engineer import FEATURE_NAMES, FeatureEngineer
+from rubric_schema import RUBRIC_DIMENSIONS
 
 logger = logging.getLogger(__name__)
-
-RUBRIC_DIMENSIONS = [
-    "objectives", "content", "methods", "assessment", "language", "time_management",
-]
 
 XGB_PARAMS = dict(
     n_estimators=200,
@@ -143,7 +140,7 @@ def predict_scores(bundle: dict, X: pd.DataFrame, rounded: bool = True) -> pd.Da
     preds = {}
     for dim in bundle["rubric_dimensions"]:
         raw = bundle["models"][dim].predict(Xz)
-        preds[dim] = np.clip(np.rint(raw) if rounded else raw, 0, 4)
+        preds[dim] = np.clip(np.rint(raw) if rounded else raw, 1, 4)
     return pd.DataFrame(preds, index=X.index)
 
 
