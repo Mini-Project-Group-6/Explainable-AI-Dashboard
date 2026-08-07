@@ -43,6 +43,13 @@ FEATURE_NAMES: list[str] = [
     "time_total_consistency",       # F16
     "sentence_complexity_index",    # F17 (raw; z-scored at training time)
     "readability_flesch",           # F18
+    # v0.3 — added so every rubric criterion has at least one feature that
+    # measures it. Before these, four criteria were scored by a model that had
+    # nothing measuring them, and their SHAP decompositions were not evidence.
+    "resource_specificity_count",   # F19
+    "rpk_link_score",               # F20
+    "differentiation_strategy_count",  # F21
+    "closure_quality_score",        # F22
 ]
 
 # --- Lexicons (FEATURES.md Appendix A; UK + US spellings, stored as lemmas) ---
@@ -106,6 +113,58 @@ _CRITERION_WORDS = frozenset({
 _CRITERION_PHRASES = ("at least", "at most", "without", "using", "given",
                       "with the aid of", "within")
 
+# --- v0.3 lexicons (F19-F22) ---
+
+# F19 — concrete, nameable teaching/learning resources. Deliberately specific
+# nouns: "TLMs will be used" names nothing and should score 0.
+RESOURCE_NOUNS: frozenset[str] = frozenset({
+    "flashcard", "flash-card", "chart", "poster", "picture", "diagram", "map",
+    "textbook", "handout", "worksheet", "exercise book", "chalkboard",
+    "whiteboard", "blackboard", "chalk", "marker", "cardboard", "manila",
+    "specimen", "sample", "real object", "model", "counter", "abacus",
+    "ruler", "measuring", "bottle", "seed", "leaf", "stone", "straw",
+    "projector", "computer", "laptop", "tablet", "phone", "video", "radio",
+    "recording", "slide", "software", "internet",
+})
+
+# ICT subset — the criterion names ICT explicitly, so it is worth a bump.
+ICT_NOUNS: frozenset[str] = frozenset({
+    "projector", "computer", "laptop", "tablet", "phone", "video", "radio",
+    "recording", "slide", "software", "internet", "ict",
+})
+
+# F20 — cues that the introduction reaches back to prior learning.
+RPK_CUES: tuple[str, ...] = (
+    "previous knowledge", "prior knowledge", "previous lesson", "last lesson",
+    "already know", "already learnt", "already learned", "rpk", "recall",
+    "review", "revise", "build on", "learnt before", "learned before",
+)
+
+# F21 — distinct differentiation strategies, one bucket each.
+DIFFERENTIATION_STRATEGIES: dict[str, tuple[str, ...]] = {
+    "support": ("support task", "scaffold", "struggling", "slower learner",
+                "below level", "remedial", "extra help", "targeted support"),
+    "extension": ("extension", "challenge task", "above level", "gifted",
+                  "finish early", "enrichment", "advanced learner"),
+    "sen": ("special educational needs", "sen", "disability", "impair",
+            "hearing", "visual", "inclusive", "inclusion"),
+    "grouping": ("mixed ability", "ability group", "pair weaker",
+                 "heterogeneous", "grouped by"),
+    "equity": ("gender", "girls", "boys equally", "participation is shared",
+               "equal opportunity", "fairly"),
+    "language": ("mother tongue", "local language", "multilingual",
+                 "language support", "code switch"),
+}
+
+# F22 — what a closure has to do to count as one.
+CLOSURE_SUMMARY_CUES = ("summar", "recap", "key point", "main point",
+                        "consolidat", "review the lesson", "conclude")
+CLOSURE_LEARNER_CUES = ("learners summar", "learners state", "learners recall",
+                        "ask learners", "learners share", "learners explain",
+                        "pupils summar", "learners mention")
+CLOSURE_CHECK_CUES = ("check", "confirm", "assess", "objective", "attainment",
+                      "question", "verify", "ensure they")
+
 _TIME_RE = re.compile(r"\b(\d+)\s*(?:minutes|mins?)\b", re.IGNORECASE)
 _NUMBERED_ITEM_RE = re.compile(r"^\s*(?:\d+[\.\)]|[a-z][\.\)]|[ivx]+[\.\)])\s+",
                                re.IGNORECASE | re.MULTILINE)
@@ -151,6 +210,12 @@ class FeatureEngineer:
         features["time_total_consistency"] = self._time_consistency(plan)  # F16
         features["sentence_complexity_index"] = self._complexity(full_doc)  # F17
         features["readability_flesch"] = self._flesch(full_doc)           # F18
+        features["resource_specificity_count"] = self._resource_specificity(  # F19
+            plan)
+        features["rpk_link_score"] = self._rpk_link(plan, objectives_doc)  # F20
+        features["differentiation_strategy_count"] = (                    # F21
+            self._differentiation_strategies(plan))
+        features["closure_quality_score"] = self._closure_quality(plan)   # F22
 
         return {name: float(features[name]) for name in FEATURE_NAMES}
 
@@ -326,6 +391,83 @@ class FeatureEngineer:
             lengths.append(len(tokens))
             depths.append(max((self._parse_depth(t) for t in tokens), default=0))
         return (sum(lengths) / len(lengths)) * (sum(depths) / len(depths))
+
+    # -- v0.3 features (F19-F22) -------------------------------------------
+
+    @staticmethod
+    def _section_or_plan(plan: LessonPlanText, section: str) -> str:
+        """Section text, falling back to the whole plan if it has no header.
+
+        Plans that never separate out (say) resources still mention them inline,
+        and a feature that returned 0 for those would be measuring layout rather
+        than practice.
+        """
+        text = plan.sections.get(section, "")
+        return text if text.strip() else plan.raw_text
+
+    def _resource_specificity(self, plan: LessonPlanText) -> float:
+        """F19 — how many distinct, concrete resources the plan actually names.
+
+        Counting named nouns rather than section length is the point: "TLMs will
+        be provided" names nothing and scores 0, which is the judgement a tutor
+        makes.
+        """
+        text = self._section_or_plan(plan, "resources").lower()
+        named = {noun for noun in RESOURCE_NOUNS if noun in text}
+        # ICT is called out by the criterion itself, so having any is worth one.
+        ict_bonus = 1 if any(noun in text for noun in ICT_NOUNS) else 0
+        return min(10, len(named) + ict_bonus)
+
+    def _rpk_link(self, plan: LessonPlanText, objectives_doc) -> float:
+        """F20 — does the opening connect prior knowledge to this lesson?
+
+        Three equal parts: an opening exists, it cues prior learning, and it
+        shares vocabulary with what the lesson is about. The third part is what
+        separates a real link from the boilerplate "Teacher revises previous
+        knowledge" that appears in every weak plan.
+        """
+        opening = " ".join(
+            part for part in (plan.sections.get("rpk", ""),
+                              plan.sections.get("introduction", ""))
+            if part.strip())
+        if not opening.strip():
+            return 0.0
+
+        score = 1.0 / 3.0
+        lower = opening.lower()
+        if any(cue in lower for cue in RPK_CUES):
+            score += 1.0 / 3.0
+
+        opening_doc = self._doc(opening)
+        overlap = self._lemma_overlap(objectives_doc, opening_doc)
+        if overlap > 0.05:
+            score += 1.0 / 3.0
+        return round(score, 4)
+
+    def _differentiation_strategies(self, plan: LessonPlanText) -> float:
+        """F21 — distinct kinds of provision for differing learner needs (0-6)."""
+        text = self._section_or_plan(plan, "differentiation").lower()
+        return sum(1 for cues in DIFFERENTIATION_STRATEGIES.values()
+                   if any(cue in text for cue in cues))
+
+    def _closure_quality(self, plan: LessonPlanText) -> float:
+        """F22 — whether the closure does the three things a closure should.
+
+        Present, consolidates, involves the learners, and checks attainment.
+        A closure that is only "Teacher summarises" scores partially, which is
+        the distinction the rubric draws.
+        """
+        text = plan.sections.get("closure", "")
+        if not text.strip():
+            return 0.0
+        lower = text.lower()
+        parts = [
+            1.0,                                                    # present
+            any(cue in lower for cue in CLOSURE_SUMMARY_CUES),
+            any(cue in lower for cue in CLOSURE_LEARNER_CUES),
+            any(cue in lower for cue in CLOSURE_CHECK_CUES),
+        ]
+        return round(sum(float(p) for p in parts) / len(parts), 4)
 
     def _flesch(self, full_doc) -> float:
         words = [t for t in full_doc if t.is_alpha]

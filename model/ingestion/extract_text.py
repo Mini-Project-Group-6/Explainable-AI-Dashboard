@@ -23,7 +23,15 @@ logger = logging.getLogger(__name__)
 
 # Canonical section names. "content" covers presentation / core points;
 # these five are the main stages used by the time-management features F15/F16.
+# Do not add to this tuple to introduce a new section — F15 is a share *of these
+# stages*, so extending it silently rescales a trained feature.
 MAIN_STAGES = ("introduction", "content", "activities", "assessment", "closure")
+
+# Sections a complete plan is expected to have. Anything here that is absent is
+# reported in ``missing_sections`` and drives S2's revision suggestions. Wider
+# than MAIN_STAGES on purpose: rpk, resources and differentiation are not timed
+# stages but their absence is exactly what the rubric penalises.
+EXPECTED_SECTIONS = ("objectives", "rpk", "resources", "differentiation") + MAIN_STAGES
 
 # Ordered: first matching pattern wins, so more specific headers
 # (e.g. "learner activities") must come before generic ones.
@@ -33,6 +41,15 @@ SECTION_PATTERNS: list[tuple[str, re.Pattern]] = [
         re.IGNORECASE)),
     ("rpk", re.compile(
         r"\br\.?\s?p\.?\s?k\.?\b|relevant\s+previous\s+knowledge|previous\s+knowledge",
+        re.IGNORECASE)),
+    # Added in v0.3 for the resources/ICT and attention-to-all-learners
+    # criteria, which had no section of their own and so no features.
+    ("resources", re.compile(
+        r"resources?|materials?|t\.?\s?l\.?\s?m\.?s?\b|teaching\s+aids?|apparatus",
+        re.IGNORECASE)),
+    ("differentiation", re.compile(
+        r"differentiat|inclusi(on|ve)|special\s+educational\s+needs|s\.?e\.?n\.?\b"
+        r"|mixed\s+ability|learner\s+diversity|catering",
         re.IGNORECASE)),
     ("introduction", re.compile(
         r"introduction|lesson\s+opening|starter|set\s+induction",
@@ -62,6 +79,14 @@ _DURATION_RE = re.compile(
     re.IGNORECASE)
 
 
+#: Below this many recognised sections, assume the *segmenter* failed rather
+#: than the plan. The header keyword lists are still a draft (FEATURES.md open
+#: question 2) and a plan laid out in an unanticipated format would otherwise
+#: have most of its features silently default to 0 and be scored as a very poor
+#: plan. A parsing failure and a bad lesson must not look the same to a tutor.
+SECTION_RECOGNITION_FLOOR = 4
+
+
 @dataclass
 class LessonPlanText:
     """Extraction result consumed by the feature engineer."""
@@ -70,10 +95,35 @@ class LessonPlanText:
     raw_text: str
     # canonical section name -> section body text ("" if not found)
     sections: dict[str, str] = field(default_factory=dict)
-    # sections from objectives + MAIN_STAGES that were not found; also
-    # surfaced to S2's improvement-suggestions panel
+    # expected sections that were not found; surfaced to S2's suggestions panel
     missing_sections: list[str] = field(default_factory=list)
     stated_duration_minutes: Optional[int] = None
+
+    @property
+    def sections_found(self) -> int:
+        return len(EXPECTED_SECTIONS) - len(self.missing_sections)
+
+    @property
+    def format_recognised(self) -> bool:
+        """False when the plan looks unparsed rather than poor.
+
+        Consumers must not present scores as findings about teaching quality
+        when this is False — see ``format_warning``.
+        """
+        return self.sections_found >= SECTION_RECOGNITION_FLOOR
+
+    @property
+    def format_warning(self) -> Optional[str]:
+        """Tutor-facing explanation of a suspected parsing failure, or None."""
+        if self.format_recognised:
+            return None
+        return (
+            f"Only {self.sections_found} of {len(EXPECTED_SECTIONS)} expected "
+            f"sections were recognised in this document. The scores below are "
+            f"probably measuring a layout this tool does not yet read, not the "
+            f"quality of the lesson. Check that the plan uses headed sections "
+            f"(objectives, introduction/RPK, resources, activities, assessment, "
+            f"closure) before acting on the feedback.")
 
 
 def extract_raw_text(path: str | Path) -> str:
@@ -158,11 +208,38 @@ def segment_sections(raw_text: str) -> tuple[dict[str, str], list[str]]:
         sections.setdefault(current, []).append(line)
 
     joined = {name: "\n".join(lines).strip() for name, lines in sections.items()}
-    expected = ("objectives",) + MAIN_STAGES
-    missing = [name for name in expected if not joined.get(name)]
+    missing = [name for name in EXPECTED_SECTIONS if not joined.get(name)]
     for name in missing:
         logger.info("Section not found: %s", name)
     return joined, missing
+
+
+def section_spans(raw_text: str) -> list[tuple[str, int, int]]:
+    """(section_name, start_char, end_char) for each section, in document order.
+
+    Same header detection as ``segment_sections``, but keeping character
+    offsets so a span of prose can be traced back to the section it came from
+    (used by ``explainability/shap_deep.py`` to say *where* in the plan a text
+    attribution lands). Offsets index into *raw_text* unchanged.
+    """
+    spans: list[tuple[str, int, int]] = []
+    current, section_start, cursor = "header", 0, 0
+    for line in raw_text.splitlines(keepends=True):
+        matched = _match_header(line)
+        if matched:
+            spans.append((current, section_start, cursor))
+            current, section_start = matched, cursor
+        cursor += len(line)
+    spans.append((current, section_start, cursor))
+    return [(name, start, end) for name, start, end in spans if end > start]
+
+
+def section_at(spans: list[tuple[str, int, int]], offset: int) -> str:
+    """Canonical section name containing *offset*, or "" if outside them all."""
+    for name, start, end in spans:
+        if start <= offset < end:
+            return name
+    return ""
 
 
 def parse_stated_duration(raw_text: str, header_text: str = "") -> Optional[int]:

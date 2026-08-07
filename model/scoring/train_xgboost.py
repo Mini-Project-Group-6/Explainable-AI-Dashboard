@@ -26,6 +26,10 @@ import csv
 import logging
 from pathlib import Path
 
+from compat import preload_torch
+
+preload_torch()  # must precede xgboost, incl. joblib unpickling one — see compat.py
+
 import joblib
 import numpy as np
 import pandas as pd
@@ -99,16 +103,29 @@ def apply_f17_zscore(X: pd.DataFrame, mean: float, std: float) -> pd.DataFrame:
     return X
 
 
+def validation_mask(n: int, validation_fraction: float = 0.2,
+                    seed: int = 42) -> np.ndarray:
+    """Boolean held-out mask over *n* rows.
+
+    Extracted so the text trainer and the blend-weight fitter can reproduce
+    exactly this split. ``evaluation/blend_weights.py`` compares both channels'
+    predictions on one held-out set, which is only valid if the two models were
+    validated on the same plans — and that has to be checkable, not assumed.
+    """
+    rng = np.random.RandomState(seed)
+    mask = rng.rand(n) < validation_fraction
+    if mask.all() or not mask.any():
+        mask[:] = False
+        mask[: max(1, n // 5)] = True
+    return mask
+
+
 def train(X: pd.DataFrame, Y: pd.DataFrame, validation_fraction: float = 0.2,
           seed: int = 42) -> dict:
     """Train one model per rubric dimension; returns the persistable bundle."""
     from xgboost import XGBRegressor
 
-    rng = np.random.RandomState(seed)
-    val_mask = rng.rand(len(X)) < validation_fraction
-    if val_mask.all() or not val_mask.any():
-        val_mask[:] = False
-        val_mask[: max(1, len(X) // 5)] = True
+    val_mask = validation_mask(len(X), validation_fraction, seed)
 
     f17_mean = float(X.loc[~val_mask, Z_SCORED_FEATURE].mean())
     f17_std = float(X.loc[~val_mask, Z_SCORED_FEATURE].std(ddof=0))

@@ -14,6 +14,10 @@ from __future__ import annotations
 import argparse
 import logging
 
+from compat import preload_torch
+
+preload_torch()  # must precede sklearn — see compat.py
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
@@ -46,11 +50,74 @@ def cross_validate(X: pd.DataFrame, Y: pd.DataFrame, n_splits: int = 5,
     return summary.loc[order]
 
 
+#: Written beside the model so the reconciler can weight the structural channel
+#: by measured agreement, symmetrically with the text channel's report. Without
+#: it, reconcile falls back to the coverage heuristic for both sides.
+RELIABILITY_REPORT_NAME = "tabular_holdout_report.json"
+
+
+def write_reliability_report(summary: pd.DataFrame, out_dir,
+                             n_plans: int, n_splits: int):
+    """Persist per-criterion cross-validated QWK as channel weights.
+
+    The text channel has had measured weights since it was trained; the
+    structural channel was still being weighted by a *coverage* heuristic, which
+    is not the same kind of quantity and produced a blend that under-weighted
+    the more accurate channel. This closes that asymmetry.
+    """
+    import json
+    from pathlib import Path
+
+    from model_contract import CONTRACT_VERSION, CRITERION_KEYS
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "contract_version": CONTRACT_VERSION,
+        "n_plans": n_plans,
+        "n_splits": n_splits,
+        "metric": "quadratic_weighted_kappa",
+        "note": ("Cross-validated on synthetic plans. Re-run against the real "
+                 "annotated CoE plans before relying on these weights."),
+        "per_criterion": {
+            key: {"qwk": round(float(summary.loc[key, "qwk_mean"]), 4),
+                  "rmse": round(float(summary.loc[key, "rmse_mean"]), 4)}
+            for key in CRITERION_KEYS if key in summary.index
+        },
+        "mean_qwk": round(float(summary.loc["MEAN", "qwk_mean"]), 4),
+    }
+    path = out_dir / RELIABILITY_REPORT_NAME
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def load_structural_reliability(artifacts_dir=None) -> dict[str, float]:
+    """criterion -> cross-validated QWK, or {} if CV has not been run.
+
+    Negative kappa is floored at 0: a criterion the model cannot do gets no
+    weight rather than negative weight.
+    """
+    import json
+    from pathlib import Path
+
+    from model_contract import ARTIFACTS_DIR
+
+    path = Path(artifacts_dir or ARTIFACTS_DIR) / RELIABILITY_REPORT_NAME
+    if not path.is_file():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return {key: max(0.0, float(entry["qwk"]))
+            for key, entry in payload.get("per_criterion", {}).items()}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="5-fold CV of the rubric scorer")
     parser.add_argument("--labels", required=True)
     parser.add_argument("--plans", required=True)
     parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--artifacts", default=None,
+                        help="where to write the reliability report "
+                             "(default: the contract's artifacts directory)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -63,6 +130,12 @@ def main() -> None:
     print(summary.round(3).to_string())
     qwk = summary.loc["MEAN", "qwk_mean"]
     print(f"\nOverall mean QWK: {qwk:.3f}  (target >= 0.70)")
+
+    from model_contract import ARTIFACTS_DIR
+
+    path = write_reliability_report(summary, args.artifacts or ARTIFACTS_DIR,
+                                    len(X), args.folds)
+    print(f"Wrote channel weights -> {path}")
 
 
 if __name__ == "__main__":

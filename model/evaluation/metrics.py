@@ -7,6 +7,10 @@ dimension (proposal D3).
 
 from __future__ import annotations
 
+from compat import preload_torch
+
+preload_torch()  # must precede sklearn — see compat.py
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import cohen_kappa_score, mean_squared_error

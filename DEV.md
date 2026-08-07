@@ -49,24 +49,283 @@ Five-student split. Know which layer you're touching:
 
 ## Current work
 
-S1 is complete — models are trained and the rubric is finalised. Active work is **S2**:
+### Environment
 
-1. `model_contract.py` — declare artifact paths + version, the frozen feature-name list in
-   training order, criterion IDs with NTS tags, and expected output shapes from XGBoost,
-   SHAP, and DistilBERT. One `load_artifacts()` that validates feature names on load and
-   raises loudly on mismatch.
-2. Feature-label map — plain-English label per feature, its criterion, its NTS indicator.
-   SHAP plots are only explainable if the axis labels are readable by a teacher educator.
-3. Reconciling tabular SHAP values with DistilBERT token attributions into one
-   per-criterion explanation.
-4. Mapping negative feature contributions to concrete revision suggestions (rule-based).
+Python **3.12** venv at `.venv/`. `model/requirements.txt` records the working versions and
+the two documented deviations from proposal D5 (`shap` and `spacy` have no cp312 wheels at
+their pinned versions). Install torch from the CPU index, not plain PyPI — the default
+Windows wheel bundles CUDA and is ~2.4GB for a project that never touches a GPU.
+
+### Latency — why the text channel is split in two
+
+Measured on the deployment-class CPU: **one DistilBERT forward pass at 512 tokens is
+~1.2s**, and that is the floor. Raising `max_evals` 100 → 300 changed nothing; larger
+batches were *slower* per item (1159 → 1358 ms); doubling torch threads did nothing. SHAP's
+Partition explainer needs ~2 coalitions per text segment, so a 40-segment plan costs ~80
+passes ≈ 93s. Not a tuning problem — the cost is the model.
+
+So `RubricScorer` splits them:
+
+| | Cost | Default |
+|---|---|---|
+| `with_text` — DistilBERT **score**, feeds the fitted blend | ~1.2s | on |
+| `with_text_attributions` — **where in the prose** it looked | ~93s | off |
+
+Default end-to-end: **1.76s** (features 0.37, structural 0.16, text 1.22) against the ≤15s
+budget. Attribution is for S3 to precompute once per submission and cache, never to block an
+upload. Withholding it costs little: v0.3 gave every criterion a structural feature, so
+tabular SHAP explains all ten alone — text attribution existed for the four that had none.
+
+Even aggressive optimisation (int8 quantisation + ONNX Runtime, ~4× at best) lands at
+20–30s, so precompute is the answer rather than a faster path.
+
+### Unrecognised plan formats
+
+`SECTION_PATTERNS` is still a draft (FEATURES.md open question 2). A plan in an
+unanticipated layout has most features default to 0 and would be scored as a very poor
+lesson — a parsing failure and a bad lesson looked identical. Below
+`SECTION_RECOGNITION_FLOOR` (4 of 9 expected sections) `LessonPlanText.format_recognised`
+is False and `predict.py` puts `format_warning` at the head of the explanation's caveats.
+The wording blames the tool, not the student teacher. See `tests/test_format_guard.py`.
+
+### Regenerating artifacts
+
+`model/artifacts/` and `model/data/` are gitignored and regenerable:
+
+```
+cd model
+python -m data.synthetic -n 200 --out data/synthetic_v1
+python -m data.synthetic --revisions 40 --out data/synthetic_revisions
+python -m scoring.train_xgboost  --labels data/synthetic_v1/labels.csv --plans data/synthetic_v1/plans
+python -m evaluation.cross_validate --labels data/synthetic_v1/labels.csv --plans data/synthetic_v1/plans
+python -m explainability.shap_tree --model artifacts/rubric_model.joblib --labels data/synthetic_v1/labels.csv --plans data/synthetic_v1/plans --out artifacts/shap
+python -m scoring.train_bert_lora --labels data/synthetic_v1/labels.csv --plans data/synthetic_v1/plans
+```
+
+### Validation — 5-fold CV, 200 synthetic plans, 22 features (contract v2.0.0)
+
+Mean QWK **0.779** (target ≥ 0.70). Every criterion ≥ 0.726.
+
+| Criterion | QWK | | Criterion | QWK |
+|---|---|---|---|---|
+| C01 Learning outcomes | 0.886 | | C09 Concept explanation | 0.798 |
+| C05 Assessment strategies | 0.810 | | C10 Lesson closure | 0.763 |
+| C07 Lesson sequencing | 0.809 | | C08 Attention to all learners | 0.761 |
+| C06 Introduction/RPK | 0.747 | | C03 Teaching & learning strategies | 0.742 |
+| C04 Resources/ICT | 0.743 | | C02 Pedagogical content knowledge | 0.726 |
+
+**Same-corpus ablation** — the only variable is the feature set, so the gain is
+attributable to F19–F22 rather than to the generator changes made alongside them:
+
+| | 18 features | 22 features | Δ |
+|---|---|---|---|
+| C04 Resources/ICT | 0.548 | 0.743 | **+0.194** |
+| C08 Attention to all learners | 0.568 | 0.761 | **+0.193** |
+| C10 Lesson closure | 0.605 | 0.763 | **+0.159** |
+| C06 Introduction/RPK | 0.674 | 0.747 | **+0.073** |
+| other six criteria | — | — | −0.007 … +0.033 |
+| **mean QWK** | **0.708** | **0.779** | **+0.071** |
+
+**These remain synthetic-data numbers and are optimistic.** Quality profiles are
+correlated by design, so a criterion can be partly predicted from features measuring other
+criteria. They are not evidence the model holds up on real CoE plans.
+
+### Text channel — DistilBERT + LoRA, held-out (46 plans), v0.3 corpus
+
+745,738 of 67,706,900 parameters trainable (1.10%). `epochs=20`, early-stopped at 19 with
+the best checkpoint at epoch 16 (val MSE 0.4489).
+
+**Epoch count was worth measuring, not guessing.** At the original 8 epochs the model was
+still improving and reached val MSE 0.5453 / mean QWK 0.636. Allowed to run properly it
+reached 0.4489 / **0.712** — biggest single gains C07 +0.254, C05 +0.156, C04 +0.116. Note
+this is a *schedule* parameter: `get_linear_schedule_with_warmup` spreads LR decay over
+`steps × epochs`, so raising it changes the whole trajectory rather than appending epochs.
+The superseded 8-epoch checkpoint is kept at `artifacts/bert_rubric_e8` for comparison.
+
+| Criterion | Tabular (5-fold CV) | Text (held-out) |
+|---|---|---|
+| C01 Learning outcomes | **0.886** | 0.773 |
+| C05 Assessment strategies | **0.810** | 0.652 |
+| C07 Lesson sequencing | 0.809 | **0.855** |
+| C09 Concept explanation | **0.798** | 0.797 |
+| C10 Lesson closure | **0.763** | 0.542 |
+| C08 Attention to all learners | **0.761** | 0.698 |
+| C06 Introduction/RPK | **0.747** | 0.627 |
+| C04 Resources/ICT | **0.743** | 0.720 |
+| C03 Teaching & learning strategies | **0.742** | 0.691 |
+| C02 Pedagogical content knowledge | 0.726 | **0.766** |
+| **MEAN** | **0.779** | **0.712** |
+
+> **Correction — an earlier version of this file claimed the text model beat the tabular
+> model on the four criteria structure could not measure, and called that the
+> channel-weighting design "confirmed by measurement". That was measured on the pre-v0.3
+> corpus and does not hold.** On that corpus the generator emitted one fixed sentence per
+> score for exactly those blocks ("Slower learners will be helped." = score 2), so the text
+> model was matching fixed strings — the same artifact class as the F21 bijection fixed at
+> the same time. Once the generator sampled from phrase pools with jitter, the advantage
+> disappeared: the tabular model now leads on **all ten** criteria.
+>
+> What survived as clean evidence is the same-corpus ablation above: adding F19–F22 raised
+> mean QWK 0.708 → 0.779 with gains concentrated on the four target criteria.
+>
+> **Second correction (after proper training).** With `epochs=8` the text channel looked
+> like it might not earn its place at all. It was undertrained. At 20 epochs it beats the
+> structural channel outright on C02 and C04, and the fitted blend beats both channels alone
+> on 8 of 10 criteria. The right claim is narrower than the original one and better
+> supported: *the two channels make partly uncorrelated errors, so blending them at
+> per-criterion weights fitted to held-out error beats either alone* — not "text rescues the
+> criteria structure cannot measure", which was a generator artifact.
+
+Held-out QWK is written to `artifacts/bert_rubric/holdout_report.json` and loaded by
+`TextRubricScorer.reliability`, which `predict.py` feeds to `reconcile` as per-criterion
+`text_reliability`. Regenerate with `python -m scoring.train_bert_lora ... --eval-only`.
+
+### Channel blending — fitted, not assumed
+
+`channel_weights` has three fallbacks, in descending order of trustworthiness:
+
+1. **Fitted** (`evaluation/blend_weights.py`) — the weight minimising held-out error on
+   plans *both* channels were validated against. This is what runs.
+2. **Measured** — both channels' held-out QWK, compared like for like.
+3. **Heuristic** — coverage vs a flat prior, when nothing has been measured.
+
+Fitted structural weights on 46 shared held-out plans:
+
+| Criterion | w_struct | blended RMSE | struct only | text only |
+|---|---|---|---|---|
+| C01 Learning outcomes | 0.80 | **0.421** | 0.435 | 0.599 |
+| C02 Pedagogical content knowledge | **0.18** | **0.474** | 0.580 | 0.480 |
+| C03 Teaching & learning strategies | 0.61 | **0.667** | 0.708 | 0.761 |
+| C04 Resources/ICT | **0.19** | **0.650** | 0.735 | 0.655 |
+| C05 Assessment strategies | 0.84 | **0.565** | 0.576 | 0.797 |
+| C06 Introduction/RPK | **1.00** | 0.525 | 0.525 | 0.736 |
+| C07 Lesson sequencing | 0.88 | **0.380** | 0.382 | 0.474 |
+| C08 Attention to all learners | 0.98 | 0.676 | 0.676 | 0.764 |
+| C09 Concept explanation | 0.49 | **0.514** | 0.556 | 0.554 |
+| C10 Lesson closure | 0.92 | **0.586** | 0.588 | 0.772 |
+
+**The blend beats both channels alone on 8 of 10 criteria** — the ensemble gain is real, and
+it is the only justification for running two models. Mean text weight: 0.45 under
+proportional weighting → **0.31** fitted.
+
+On C02 and C04 the text channel is outright *better* than the structural one (RMSE 0.480 vs
+0.580; 0.655 vs 0.735) and the fit gives it ~80% of the weight. C04 is one of the four
+criteria text was originally introduced to rescue — with a properly trained model it does,
+on measured held-out error. On C06 the fit still zeroes text entirely.
+
+Refit after retraining either channel — the weights are only valid for the checkpoints they
+were fitted against:
+`python -m evaluation.blend_weights --labels ... --plans ...`
+
+Both trainers share `train_xgboost.validation_mask`, so the two channels are validated on
+identical plans; `blend_weights._assert_shared_holdout` checks this rather than trusting it.
+Refit after retraining either channel:
+`python -m evaluation.blend_weights --labels ... --plans ...`
+
+> **Corrected defect, kept for the record.** The weighting originally compared
+> `tabular_confidence` — a *coverage* heuristic where 1.0 just means "has ≥2 features" —
+> against the text channel's *measured* QWK. Different kinds of quantity, and the result was
+> perverse: the text model got measurably worse on every criterion yet its weight rose. The
+> like-for-like fix alone was not enough (proportional-to-accuracy still gave the weaker
+> channel 45%), which is why the weights are now fitted to held-out error.
+
+Held-out QWK is written to `artifacts/bert_rubric/holdout_report.json` and loaded by
+`TextRubricScorer.reliability`, which `predict.py` feeds to `reconcile` as per-criterion
+`text_reliability` — replacing the flat `TEXT_CHANNEL_PRIOR` guess. Regenerate with
+`python -m scoring.train_bert_lora ... --eval-only`.
+
+> **Windows: torch must be imported before xgboost.** xgboost ships its own OpenMP runtime
+> and once it is loaded, torch's `c10.dll` cannot initialise (`OSError: [WinError 1114]`).
+> spaCy pulls torch in through `thinc.compat`, so the traceback surfaces at the spaCy
+> import and looks like a broken spaCy install. `model/compat.py` fixes the order and is
+> called from `model_contract`; do not remove that call. Reproduce with
+> `python -c "import xgboost; import torch"`.
+
+> **Fixed label leak — re-read before quoting any earlier metric.** The first CV run
+> reported QWK 1.000 with zero variance for assessment strategies. `_assessment_block`
+> rendered exactly `score` numbered items, and F14 counts numbered items, so the feature
+> *was* the label (80/80 exact match). Activity counts had the same shape, and
+> `_apply_language_quality` derived writing quality from the mean of all ten scores, leaking
+> the whole profile into F17/F18. All three are fixed; the 0.724 above is post-fix. Any
+> metric recorded before this is invalid.
+
+### Brief objectives → where they live
+
+| # | Objective | Status |
+|---|-----------|--------|
+| 21 | Train XGBoost/BERT to score plans against the rubric | Code complete (`scoring/`); **no artifacts trained yet** |
+| 22 | SHAP feature-importance for *every* feedback item | `suggestions.py` — each item carries its Shapley value, influence share and `attribution_text`; non-SHAP rules declare themselves |
+| 23 | Streamlit dashboard: scores, SHAP waterfall, suggestions | S2 components in `render.py` (`st_waterfall`, `st_force_plot`, `st_beeswarm`, `st_suggestions_panel`, `st_transparency_panel`); the dashboard shell itself is S3 |
+| 24 | Measure trust + plan quality before/after | Data side ready: `data/synthetic.py --revisions N` emits before/after pairs + `revisions.csv`. Instruments are S4, analysis S5 |
+
+Method & Tools calls for waterfall, **force plot** and summary visualisations — all four
+forms are in `explainability/shap_tree.py` (`save_waterfall`, `save_force_plot` /
+`force_plot_html`, `save_beeswarm`, `save_summary_bar`).
+
+S2 is implemented:
+
+1. ✅ `model/model_contract.py` — artifact paths + version, the frozen 22-feature list in
+   training order, the 10 criterion IDs with NTS tags, expected output shapes from XGBoost,
+   SHAP and DistilBERT, and `load_artifacts()`. Validates on load *and* at import: a
+   reorder or rename in `feature_engineer.py` now raises immediately. Currently v2.0.0 —
+   the v0.3 feature additions invalidated every 1.x bundle, and the contract rejected the
+   stale one with an exact diff rather than letting SHAP index the wrong columns.
+2. ✅ `model/explainability/feature_labels.py` — plain-English label, criterion and NTS
+   indicator per feature, plus `coverage_report()` / `uncovered_criteria()`.
+3. ✅ `model/explainability/reconcile.py` — folds tabular SHAP and text attributions into
+   one per-criterion explanation. The two are never summed; scores are blended by channel
+   weight, evidence is ranked by within-channel influence share.
+4. ✅ `model/explainability/suggestions.py` — rule-based revisions. A suggestion needs both
+   a negative contribution *and* a measured value outside its healthy range.
+5. ✅ `model/explainability/render.py` — XAI UI components. Framework-free view models plus
+   Streamlit widgets for S3 to drop in: SHAP waterfall/force/beeswarm embeds, the
+   text-attribution highlighter, the suggestions panel and the transparency panel. S3 never
+   needs to import `shap` or manage a matplotlib figure.
+
+Tests: `cd model && python -m unittest discover -s tests` — 96 tests, stdlib only. They run
+on a bare checkout with no ML stack installed, which is the point: the contract's rules are
+checkable without loading the models.
+
+### Naming: the brief says "GES and NCTE", this repo says GTEC
+
+Objective 21 in the compendium predates Act 1023 (2020), under which NCTE merged into
+**GTEC**. Per the rubric-scope section above, user-facing text and manuscript material use
+GTEC. The ten criteria themselves are unchanged — this is a naming correction, not a scope
+change. Worth a line in the methods section so the supervisor sees it is deliberate.
+
+### The coverage gap is closed — keep the machinery that handled it
+
+Four criteria (resources/ICT, introduction/RPK, attention to all learners, closure) used to
+have no structural feature measuring them. **v0.3 added F19–F22 and closed that.**
+
+`uncovered_criteria()`, `coverage_report()` and `tabular_confidence()` still compute from
+the live feature map, and `reconcile.py` still withholds the structural channel below
+`STRUCTURAL_EVIDENCE_FLOOR`. They now return "no gaps" — that is a result, not dead code.
+If a criterion is ever added without a feature, the dashboard degrades honestly instead of
+presenting a decomposition that isn't evidence. `test_the_gap_machinery_still_works_if_a_gap_reappears`
+reintroduces a gap and asserts exactly that; don't delete it.
+
+### Pending verification
+
+NTS indicator codes in `model_contract.CRITERIA` are matched by **descriptor wording**
+against the National Teachers' Standards; the letter suffixes still need one pass against
+the printed STS handbook. Add each confirmed code to `_VERIFIED_NTS_CODES`;
+`unverified_criteria()` reports the rest and the UI captions itself accordingly.
 
 ## Conventions
 
 - **Feature order is a contract.** Structural features must be defined identically at
   training and inference time. This has broken before. Never reorder or rename a feature
-  without updating `model_contract.py` and retraining.
+  without updating `model_contract.py` and retraining. `model_contract` now holds an
+  independent copy of the list and compares it to the extractor at import, so drift fails
+  loudly instead of silently misattributing SHAP values.
 - **Do not modify training code** while working on S2 tasks without asking first.
+- **Never sum a tabular SHAP value and a text attribution.** They come from different
+  models over different input spaces; the sum decomposes nothing. `reconcile.py` blends
+  scores and ranks evidence by within-channel influence share instead.
+- **A suggestion needs a measured weakness, not just a negative SHAP value.** Telling a
+  student teacher to fix something they already did well is the failure mode this project
+  exists to measure.
 - Everything downstream imports artifacts through `load_artifacts()`, never by reaching for
   model files directly.
 - Improvement suggestions are rule-based, not generated text — it's more defensible to
