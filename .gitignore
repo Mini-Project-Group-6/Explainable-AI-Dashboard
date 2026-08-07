@@ -1,0 +1,5 @@
+.env
+__pycache__/
+*.pyc
+venv/
+tmp_switch_page_source.txt
