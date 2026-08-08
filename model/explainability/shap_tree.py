@@ -23,7 +23,6 @@ Run from the ``model/`` directory:
 from __future__ import annotations
 
 import argparse
-import copy
 import logging
 from pathlib import Path
 
@@ -31,7 +30,12 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from model_contract import criterion, validate_bundle
+# N_FEATURES rather than a literal in the plot calls below: with a hard-coded
+# 18 against a 22-feature contract, shap collapses the remainder into a "Sum of
+# N other features" row — hiding exactly the features v0.3 added to close the
+# coverage gap, on the corpus plots a tutor uses to judge whether they measure
+# anything at all.
+from model_contract import N_FEATURES, criterion, validate_bundle
 from explainability.feature_labels import axis_labels
 from scoring.train_xgboost import apply_f17_zscore
 
@@ -75,17 +79,30 @@ class RubricExplainer:
 
 
 def _with_readable_labels(explanation, readable: bool = True):
-    """Swap column names for the tutor-readable labels before plotting.
+    """A view of *explanation* with tutor-readable column names.
 
     A waterfall axis reading ``objective_measurability_ratio`` is not an
     explanation for a teacher educator; ``Share of objectives that are
     measurable`` is. Values are untouched — only the display names change.
+
+    Builds a new Explanation rather than copying one. ``copy.copy`` looks right
+    but is not: an Explanation keeps values, data and feature_names inside a
+    shared Slicer, so a shallow copy hands back an object whose assignment
+    writes through to the caller's explanation. Anything reading
+    ``.feature_names`` afterwards to key SHAP columns by contract name would get
+    display labels instead.
     """
     if not readable:
         return explanation
-    explanation = copy.copy(explanation)
-    explanation.feature_names = axis_labels()
-    return explanation
+
+    import shap
+
+    return shap.Explanation(
+        values=explanation.values,
+        base_values=explanation.base_values,
+        data=explanation.data,
+        feature_names=axis_labels(),
+    )
 
 
 def save_waterfall(explanation, out_path: str | Path, title: str = "",
@@ -119,7 +136,7 @@ def save_beeswarm(explanation, out_path: str | Path, title: str = "",
     import shap
 
     shap.plots.beeswarm(_with_readable_labels(explanation, readable),
-                        max_display=18, show=False)
+                        max_display=N_FEATURES, show=False)
     fig = plt.gcf()
     if title:
         fig.suptitle(title)
@@ -196,7 +213,7 @@ def save_summary_bar(explanation, out_path: str | Path, title: str = "",
     import shap
 
     shap.plots.bar(_with_readable_labels(explanation, readable),
-                   max_display=18, show=False)
+                   max_display=N_FEATURES, show=False)
     fig = plt.gcf()
     if title:
         fig.suptitle(title)

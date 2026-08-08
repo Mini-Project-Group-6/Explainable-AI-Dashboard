@@ -7,9 +7,10 @@ reaches for a model file directly.
 What this module declares:
 
 1. Artifact paths and the contract version they must satisfy.
-2. ``FEATURE_ORDER`` — the frozen 18 feature names in *training* order. This is
-   an independent copy, not a re-export: it is compared against the live
-   extractor at import time so a silent reorder/rename in
+2. ``FEATURE_ORDER`` — the frozen feature names in *training* order (22 as of
+   contract v2.0.0; read ``N_FEATURES``, never a literal). This is an
+   independent copy, not a re-export: it is compared against the live extractor
+   at import time so a silent reorder/rename in
    ``ingestion/feature_engineer.py`` fails fast instead of quietly producing
    wrong SHAP attributions. (Feature order has broken before — see DEV.md.)
 3. ``CRITERIA`` — the ten plan-assessable rubric criteria, each with a stable
@@ -28,6 +29,7 @@ lesson being taught.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -87,9 +89,10 @@ SHAP_PLOT_DIR: Final[Path] = ARTIFACTS_DIR / "shap"
 # Frozen feature order
 # --------------------------------------------------------------------------
 
-#: The 18 structural features in the exact order the XGBoost models were
-#: trained on, which is also the column order SHAP indexes into. Declared
-#: independently of the extractor on purpose — see module docstring.
+#: The structural features in the exact order the XGBoost models were trained
+#: on, which is also the column order SHAP indexes into. Declared independently
+#: of the extractor on purpose — see module docstring. F19-F22 were added in
+#: contract v2.0.0; use ``N_FEATURES`` wherever the count is needed.
 FEATURE_ORDER: Final[tuple[str, ...]] = (
     "objective_count",                 # F1
     "smart_objective_count",           # F2
@@ -316,10 +319,11 @@ OUTPUT_SHAPES: Final[dict[str, OutputSpec]] = {
         shape=("n_plans", "n_features"),
         dtype="float64",
         value_range=None,
-        notes=("Per criterion. shap.Explanation with .values (n_plans, 18), "
-               ".base_values (n_plans,) and .data (n_plans, 18). Columns follow "
-               "FEATURE_ORDER. Additive: base_value + values.sum() == the "
-               "unrounded regressor output."),
+        notes=("Per criterion. shap.Explanation with .values "
+               "(n_plans, n_features), .base_values (n_plans,) and .data "
+               "(n_plans, n_features). Columns follow FEATURE_ORDER; take the "
+               "width from N_FEATURES, never a literal. Additive: "
+               "base_value + values.sum() == the unrounded regressor output."),
     ),
     "shap_base_values": OutputSpec(
         name="shap_base_values",
@@ -386,6 +390,47 @@ class Artifacts:
     def has_text_model(self) -> bool:
         """False until S1 ships DistilBERT; consumers fall back to tabular-only."""
         return self.text_model_dir is not None
+
+    @property
+    def corpus_fingerprints(self) -> tuple[Optional[str], Optional[str]]:
+        """(structural, text) training-corpus digests; None where unrecorded."""
+        import json
+
+        structural = self.bundle.get("corpus_fingerprint")
+        text = None
+        if self.text_model_dir is not None:
+            manifest = self.text_model_dir / "text_bundle.json"
+            if manifest.is_file():
+                text = json.loads(
+                    manifest.read_text(encoding="utf-8")).get("corpus_fingerprint")
+        return structural, text
+
+    @property
+    def channels_consistent(self) -> bool:
+        """True unless the two channels were demonstrably trained on different data.
+
+        Unknown counts as consistent: artifacts predating the fingerprint have
+        no digest to compare, and refusing to run on them would be worse than
+        the risk. A *recorded mismatch* is the signal.
+        """
+        structural, text = self.corpus_fingerprints
+        if structural is None or text is None:
+            return True
+        return structural == text
+
+    @property
+    def provenance_unverified(self) -> bool:
+        """True when one channel records its corpus and the other does not.
+
+        Not a mismatch — but not nothing either. A checkpoint carrying no
+        fingerprint beside one that does is, by construction, older than the
+        fingerprint itself, so it cannot be confirmed to share the corpus. That
+        is worth saying out loud rather than passing silently as "consistent".
+        """
+        if not self.has_text_model:
+            return False
+        structural, text = self.corpus_fingerprints
+        return (structural is None) != (text is None)
 
     def feature_index(self, name: str) -> int:
         """Column index of a feature — the index SHAP values are aligned to."""
@@ -496,7 +541,47 @@ def load_artifacts(model_path: str | Path | None = None,
                 f"require_text_model=False for tabular-only explanations.")
         text_dir = None
 
-    return Artifacts(bundle=bundle, model_path=model_path, text_model_dir=text_dir)
+    artifacts = Artifacts(bundle=bundle, model_path=model_path,
+                          text_model_dir=text_dir)
+
+    structural_fp, text_fp = artifacts.corpus_fingerprints
+    if not artifacts.channels_consistent:
+        logging.getLogger(__name__).warning(
+            "Structural and text channels were trained on different corpora "
+            "(%s vs %s). Their scores are not comparable and any fitted blend "
+            "weights are invalid — retrain the stale channel and refit with "
+            "evaluation/blend_weights.py. Blending is disabled until then.",
+            structural_fp, text_fp)
+    elif artifacts.provenance_unverified:
+        logging.getLogger(__name__).warning(
+            "Only one channel records its training corpus (structural=%s, "
+            "text=%s), so they cannot be confirmed to share one. The channel "
+            "without a fingerprint predates this check and may be stale — "
+            "retrain it to remove the doubt.", structural_fp, text_fp)
+    return artifacts
+
+
+def corpus_fingerprint(labels_csv: str | Path) -> str:
+    """Stable digest of a training corpus: plan ids and their rubric scores.
+
+    The contract catches a feature-order mismatch, but nothing caught a
+    *corpus* mismatch — and that bit. Regenerating the synthetic data while
+    reusing a text checkpoint left the two channels fitted to different plans,
+    and ``predict`` happily blended them into a score with no warning at all.
+    Feature names matched, so every existing check passed.
+
+    Recorded by both trainers and compared on load. Content-based, not a
+    timestamp, so it survives copying artifacts between machines.
+    """
+    import csv
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(labels_csv, newline="", encoding="utf-8") as f:
+        for record in sorted(csv.DictReader(f), key=lambda r: r["plan_id"]):
+            row = [record["plan_id"]] + [record[k] for k in CRITERION_KEYS]
+            digest.update("|".join(row).encode("utf-8"))
+    return digest.hexdigest()[:16]
 
 
 def order_features(features: dict[str, float]) -> list[float]:

@@ -117,19 +117,28 @@ _CRITERION_PHRASES = ("at least", "at most", "without", "using", "given",
 
 # F19 — concrete, nameable teaching/learning resources. Deliberately specific
 # nouns: "TLMs will be used" names nothing and should score 0.
+#
+# Two things this lexicon must NOT do, both found in review:
+#   * match inside another word ("chalk" inside "chalkboard"), which inflated
+#     the count for a single named resource;
+#   * include words that are ordinarily a lesson's *subject matter* rather than
+#     a teaching aid. "leaf", "seed", "stone", "straw" and "bottle" were in the
+#     list, so a science plan about photosynthesis scored a resource for
+#     mentioning leaves. Those are removed; a genuine leaf specimen is still
+#     caught by "specimen" or "real object".
+# Matching is whole-word (see _lexicon_pattern), never substring.
 RESOURCE_NOUNS: frozenset[str] = frozenset({
     "flashcard", "flash-card", "chart", "poster", "picture", "diagram", "map",
     "textbook", "handout", "worksheet", "exercise book", "chalkboard",
     "whiteboard", "blackboard", "chalk", "marker", "cardboard", "manila",
-    "specimen", "sample", "real object", "model", "counter", "abacus",
-    "ruler", "measuring", "bottle", "seed", "leaf", "stone", "straw",
-    "projector", "computer", "laptop", "tablet", "phone", "video", "radio",
+    "specimen", "real object", "counter", "abacus", "ruler", "measuring tape",
+    "projector", "computer", "laptop", "tablet", "video", "radio",
     "recording", "slide", "software", "internet",
 })
 
 # ICT subset — the criterion names ICT explicitly, so it is worth a bump.
 ICT_NOUNS: frozenset[str] = frozenset({
-    "projector", "computer", "laptop", "tablet", "phone", "video", "radio",
+    "projector", "computer", "laptop", "tablet", "video", "radio",
     "recording", "slide", "software", "internet", "ict",
 })
 
@@ -141,17 +150,25 @@ RPK_CUES: tuple[str, ...] = (
 )
 
 # F21 — distinct differentiation strategies, one bucket each.
+#
+# Every cue here is matched whole-word. Review found that the bare "sen" cue,
+# matched as a substring, fired on "preSENtation" — the canonical header of the
+# content section — so this feature returned >= 1 for essentially every plan,
+# including plans with no differentiation content whatsoever. "visual" and
+# "hearing" had the same problem against "visual aids" and ordinary prose, so
+# they are now bound to the impairment they were meant to detect.
 DIFFERENTIATION_STRATEGIES: dict[str, tuple[str, ...]] = {
-    "support": ("support task", "scaffold", "struggling", "slower learner",
-                "below level", "remedial", "extra help", "targeted support"),
-    "extension": ("extension", "challenge task", "above level", "gifted",
-                  "finish early", "enrichment", "advanced learner"),
-    "sen": ("special educational needs", "sen", "disability", "impair",
-            "hearing", "visual", "inclusive", "inclusion"),
+    "support": ("support task", "scaffold", "scaffolded", "struggling",
+                "slower learner", "below level", "below-level", "remedial",
+                "extra help", "targeted support"),
+    "extension": ("extension", "challenge task", "above level", "above-level",
+                  "gifted", "finish early", "enrichment", "advanced learner"),
+    "sen": ("special educational needs", "sen", "disability", "impairment",
+            "hearing impairment", "visual impairment", "inclusive", "inclusion"),
     "grouping": ("mixed ability", "ability group", "pair weaker",
                  "heterogeneous", "grouped by"),
     "equity": ("gender", "girls", "boys equally", "participation is shared",
-               "equal opportunity", "fairly"),
+               "equal opportunity"),
     "language": ("mother tongue", "local language", "multilingual",
                  "language support", "code switch"),
 }
@@ -164,6 +181,30 @@ CLOSURE_LEARNER_CUES = ("learners summar", "learners state", "learners recall",
                         "pupils summar", "learners mention")
 CLOSURE_CHECK_CUES = ("check", "confirm", "assess", "objective", "attainment",
                       "question", "verify", "ensure they")
+
+def _lexicon_pattern(terms) -> re.Pattern:
+    """Whole-word alternation over a lexicon, longest term first.
+
+    Plain ``term in text`` is wrong for every lexicon in this module and it
+    failed silently for two of them: "sen" matched inside "presentation" and
+    "chalk" inside "chalkboard", so features intended to measure differentiation
+    and resource specificity were partly constants. Word boundaries make a match
+    mean what the lexicon says it means. Longest-first ordering keeps
+    "measuring tape" from being reported as "measuring".
+    """
+    ordered = sorted(terms, key=len, reverse=True)
+    return re.compile(
+        r"(?<!\w)(?:" + "|".join(re.escape(t) for t in ordered) + r")(?!\w)",
+        re.IGNORECASE)
+
+
+_RESOURCE_RE = _lexicon_pattern(RESOURCE_NOUNS)
+_ICT_RE = _lexicon_pattern(ICT_NOUNS)
+_DIFFERENTIATION_RES: dict[str, re.Pattern] = {
+    bucket: _lexicon_pattern(cues)
+    for bucket, cues in DIFFERENTIATION_STRATEGIES.items()
+}
+_RPK_CUE_RE = _lexicon_pattern(RPK_CUES)
 
 _TIME_RE = re.compile(r"\b(\d+)\s*(?:minutes|mins?)\b", re.IGNORECASE)
 _NUMBERED_ITEM_RE = re.compile(r"^\s*(?:\d+[\.\)]|[a-z][\.\)]|[ivx]+[\.\)])\s+",
@@ -412,10 +453,10 @@ class FeatureEngineer:
         be provided" names nothing and scores 0, which is the judgement a tutor
         makes.
         """
-        text = self._section_or_plan(plan, "resources").lower()
-        named = {noun for noun in RESOURCE_NOUNS if noun in text}
+        text = self._section_or_plan(plan, "resources")
+        named = {m.group(0).lower() for m in _RESOURCE_RE.finditer(text)}
         # ICT is called out by the criterion itself, so having any is worth one.
-        ict_bonus = 1 if any(noun in text for noun in ICT_NOUNS) else 0
+        ict_bonus = 1 if _ICT_RE.search(text) else 0
         return min(10, len(named) + ict_bonus)
 
     def _rpk_link(self, plan: LessonPlanText, objectives_doc) -> float:
@@ -434,8 +475,7 @@ class FeatureEngineer:
             return 0.0
 
         score = 1.0 / 3.0
-        lower = opening.lower()
-        if any(cue in lower for cue in RPK_CUES):
+        if _RPK_CUE_RE.search(opening):
             score += 1.0 / 3.0
 
         opening_doc = self._doc(opening)
@@ -446,9 +486,9 @@ class FeatureEngineer:
 
     def _differentiation_strategies(self, plan: LessonPlanText) -> float:
         """F21 — distinct kinds of provision for differing learner needs (0-6)."""
-        text = self._section_or_plan(plan, "differentiation").lower()
-        return sum(1 for cues in DIFFERENTIATION_STRATEGIES.values()
-                   if any(cue in text for cue in cues))
+        text = self._section_or_plan(plan, "differentiation")
+        return sum(1 for pattern in _DIFFERENTIATION_RES.values()
+                   if pattern.search(text))
 
     def _closure_quality(self, plan: LessonPlanText) -> float:
         """F22 — whether the closure does the three things a closure should.

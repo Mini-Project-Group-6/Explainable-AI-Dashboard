@@ -14,15 +14,24 @@ measuring it. Same-corpus ablation, 5-fold CV over 200 synthetic plans:
 
 | | 18 features | 22 features | Δ |
 |---|---|---|---|
-| C04 Resources/ICT | 0.548 | 0.743 | **+0.194** |
-| C08 Attention to all learners | 0.568 | 0.761 | **+0.193** |
-| C10 Lesson closure | 0.605 | 0.763 | **+0.159** |
-| C06 Introduction/RPK | 0.674 | 0.747 | **+0.073** |
-| other six criteria | — | — | −0.007 … +0.033 |
-| **mean QWK** | **0.708** | **0.779** | **+0.071** |
+| C08 Attention to all learners | 0.568 | 0.752 | **+0.184** |
+| C10 Lesson closure | 0.605 | 0.743 | **+0.139** |
+| C04 Resources/ICT | 0.548 | 0.631 | **+0.082** |
+| C06 Introduction/RPK | 0.674 | 0.740 | **+0.066** |
+| other six criteria | — | — | −0.001 … +0.023 |
+| **mean QWK** | **0.708** | **0.759** | **+0.051** |
 
 The gain is concentrated on the four targeted criteria with no measurable cost
 elsewhere, which is the evidence that the features — not the corpus — caused it.
+
+> **These numbers were corrected after code review.** F19 and F21 originally
+> matched their lexicons by bare substring, so `"sen"` matched inside
+> "pre**sen**tation" and F19 counted lesson subject-matter ("leaf", "seed") as
+> teaching resources. Both features returned ≥1 on plans containing neither
+> resources nor differentiation, making them partly constants and inflating the
+> measured gain (mean +0.071, C04 +0.194 as first reported). Matching is now
+> whole-word. **Any lexicon added here must use `_lexicon_pattern`, never
+> `term in text`.**
 
 The proposal (Part D3) explicitly names: SMART objective count, Bloom's
 taxonomy verb distribution (6 levels), content-to-activity ratio, assessment

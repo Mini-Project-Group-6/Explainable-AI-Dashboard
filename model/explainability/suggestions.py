@@ -265,13 +265,25 @@ FEATURE_RULES: dict[str, FeatureRule] = {
 
 @dataclass(frozen=True)
 class PresenceRule:
-    """Fires when none of *keywords* appears anywhere in the plan."""
+    """Fires when none of *keywords* appears anywhere in the plan.
+
+    Keywords are matched **whole-word**. As bare substrings they silently
+    misfired: "sen" matched inside "presentation", so any plan with a
+    presentation stage suppressed the differentiation suggestion — meaning a
+    plan that said nothing about SEN was never told to add it, which is exactly
+    the case this rule exists for.
+    """
 
     criterion_key: str
     keywords: tuple[str, ...]
     message: str
     evidence: str
     severity: float = 0.8
+
+    def matches(self, text: str) -> bool:
+        from ingestion.feature_engineer import _lexicon_pattern
+
+        return bool(_lexicon_pattern(self.keywords).search(text))
 
 
 PRESENCE_RULES: tuple[PresenceRule, ...] = (
@@ -287,10 +299,12 @@ PRESENCE_RULES: tuple[PresenceRule, ...] = (
     ),
     PresenceRule(
         criterion_key="attention_to_all_learners",
-        keywords=("mixed ability", "special educational needs", "sen", "differentiat",
-                  "support task", "extension", "struggling", "slower learner",
-                  "gifted", "gender", "inclusive", "all learners", "below level",
-                  "above level", "scaffold"),
+        keywords=("mixed ability", "special educational needs", "sen",
+                  "differentiation", "differentiated", "support task",
+                  "extension", "struggling", "slower learner", "gifted",
+                  "gender", "inclusive", "all learners", "below level",
+                  "below-level", "above level", "above-level", "scaffold",
+                  "scaffolded"),
         message=("Say how learners with different needs will be supported. Add a "
                  "support task for learners who struggle and an extension task for "
                  "those who finish early, and note any learner needing targeted help."),
@@ -458,11 +472,10 @@ def presence_suggestions(raw_text: str,
         ))
         seen.add(key)
 
-    lowered = raw_text.lower()
     for rule in PRESENCE_RULES:
         if rule.criterion_key in seen:
             continue                     # already flagged by a missing section
-        if any(keyword in lowered for keyword in rule.keywords):
+        if rule.matches(raw_text):
             continue
         target = criterion(rule.criterion_key)
         found.append(Suggestion(
@@ -479,10 +492,20 @@ def presence_suggestions(raw_text: str,
     return found
 
 
+#: Ceiling on how much of the panel "you did not include X" items may take.
+#: Without it a plan the segmenter failed on produces up to nine missing-section
+#: suggestions at severity 0.9 across eight criteria, which fill max_total
+#: outright and push every SHAP-driven item off the list — so the tutor is told
+#: the tool could not read the document, then given eight items blaming the
+#: student teacher for sections the tool simply did not find.
+PRESENCE_SHARE_OF_PANEL: float = 0.5
+
+
 def revision_suggestions(explanation: PlanExplanation,
                          feature_values: Mapping[str, float],
                          *, raw_text: str = "",
                          missing_sections: Sequence[str] = (),
+                         format_recognised: bool = True,
                          min_influence: float = MIN_INFLUENCE,
                          max_per_criterion: int = 2,
                          max_total: int = 8) -> tuple[Suggestion, ...]:
@@ -493,10 +516,16 @@ def revision_suggestions(explanation: PlanExplanation,
         feature_values: the RAW extracted feature dict (F17 not z-scored).
         raw_text: the plan text, for the presence rules.
         missing_sections: from ``LessonPlanText.missing_sections``.
+        format_recognised: from ``LessonPlanText.format_recognised``. When
+            False the segmenter probably failed, so "you did not include X" is
+            not a claim we can make — presence rules are suppressed entirely and
+            only measured weaknesses are reported.
         max_per_criterion: cap so one weak criterion cannot fill the panel.
         max_total: cap so a weak plan gets a workable list, not 30 items.
     """
-    collected: list[Suggestion] = presence_suggestions(raw_text, missing_sections)
+    collected: list[Suggestion] = []
+    if format_recognised:
+        collected += presence_suggestions(raw_text, missing_sections)
 
     for criterion_explanation in explanation.criteria:
         # A criterion with no trustworthy evidence channel gets presence rules
@@ -527,10 +556,19 @@ def revision_suggestions(explanation: PlanExplanation,
     ranked = sorted(deduped.values(),
                     key=lambda s: (-s.severity, order[s.criterion_key], s.id))
 
-    # Keep the list spread across criteria rather than stacked on the worst one.
+    # Keep the list spread across criteria rather than stacked on the worst one,
+    # and keep "you did not include X" from crowding out the measured findings:
+    # presence rules all carry severity 0.9, well above any SHAP-driven item, so
+    # unchecked they would sort to the top and fill the panel.
+    presence_budget = max(1, int(max_total * PRESENCE_SHARE_OF_PANEL))
     per_criterion: dict[str, int] = {}
+    presence_used = 0
     final: list[Suggestion] = []
     for suggestion in ranked:
+        if suggestion.source != "shap":
+            if presence_used >= presence_budget:
+                continue
+            presence_used += 1
         count = per_criterion.get(suggestion.criterion_key, 0)
         if count >= max_per_criterion:
             continue

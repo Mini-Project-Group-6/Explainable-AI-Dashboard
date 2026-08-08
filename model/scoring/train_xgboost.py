@@ -174,6 +174,9 @@ def main() -> None:
     X, Y, _ = load_dataset(args.labels, args.plans)
     logger.info("Training on %d plans x %d features", *X.shape)
     bundle = train(X, Y)
+    # Lets load_artifacts detect a channel trained on a different corpus.
+    from model_contract import corpus_fingerprint
+    bundle["corpus_fingerprint"] = corpus_fingerprint(args.labels)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

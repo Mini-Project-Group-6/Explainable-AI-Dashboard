@@ -332,7 +332,7 @@ def write_holdout_report(model_dir: str | Path, report, n_val: int) -> Path:
 
 
 def save(model, tokenizer, out_dir: str | Path, base_model: str,
-         training_summary: dict) -> Path:
+         training_summary: dict, corpus_fingerprint: Optional[str] = None) -> Path:
     """Persist the adapter, tokenizer and the contract manifest."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -340,6 +340,10 @@ def save(model, tokenizer, out_dir: str | Path, base_model: str,
     tokenizer.save_pretrained(out_dir)
     manifest = {
         "contract_version": CONTRACT_VERSION,
+        # Lets load_artifacts detect that this checkpoint and the structural
+        # model were fitted to different corpora — the mismatch that otherwise
+        # passes every check and silently produces a blended score.
+        "corpus_fingerprint": corpus_fingerprint,
         "base_model": base_model,
         "criterion_keys": list(CRITERION_KEYS),
         "score_range": [SCORE_MIN, SCORE_MAX],
@@ -478,7 +482,10 @@ def main() -> None:
         model, tokenizer, summary = train(
             dataset, base_model=args.base_model,
             config={"epochs": args.epochs, "batch_size": args.batch_size})
-        out_dir = save(model, tokenizer, args.out, args.base_model, summary)
+        from model_contract import corpus_fingerprint
+
+        out_dir = save(model, tokenizer, args.out, args.base_model, summary,
+                       corpus_fingerprint=corpus_fingerprint(args.labels))
         logger.info("Saved text model -> %s (best val MSE %.4f)",
                     out_dir, summary["best_val_mse"])
 

@@ -104,27 +104,65 @@ python -m scoring.train_bert_lora --labels data/synthetic_v1/labels.csv --plans 
 
 ### Validation — 5-fold CV, 200 synthetic plans, 22 features (contract v2.0.0)
 
-Mean QWK **0.779** (target ≥ 0.70). Every criterion ≥ 0.726.
+Mean QWK **0.783** (target ≥ 0.70). Every criterion ≥ 0.638.
 
 | Criterion | QWK | | Criterion | QWK |
 |---|---|---|---|---|
-| C01 Learning outcomes | 0.886 | | C09 Concept explanation | 0.798 |
-| C05 Assessment strategies | 0.810 | | C10 Lesson closure | 0.763 |
-| C07 Lesson sequencing | 0.809 | | C08 Attention to all learners | 0.761 |
-| C06 Introduction/RPK | 0.747 | | C03 Teaching & learning strategies | 0.742 |
-| C04 Resources/ICT | 0.743 | | C02 Pedagogical content knowledge | 0.726 |
+| C01 Learning outcomes | 0.896 | | C10 Lesson closure | 0.831 |
+| C05 Assessment strategies | 0.854 | | C07 Lesson sequencing | 0.826 |
+| C09 Concept explanation | 0.848 | | C02 Pedagogical content knowledge | 0.790 |
+| C08 Attention to all learners | 0.738 | | C06 Introduction/RPK | 0.722 |
+| C04 Resources/ICT | 0.691 | | C03 Teaching & learning strategies | 0.638 |
 
 **Same-corpus ablation** — the only variable is the feature set, so the gain is
 attributable to F19–F22 rather than to the generator changes made alongside them:
 
 | | 18 features | 22 features | Δ |
 |---|---|---|---|
-| C04 Resources/ICT | 0.548 | 0.743 | **+0.194** |
-| C08 Attention to all learners | 0.568 | 0.761 | **+0.193** |
-| C10 Lesson closure | 0.605 | 0.763 | **+0.159** |
-| C06 Introduction/RPK | 0.674 | 0.747 | **+0.073** |
-| other six criteria | — | — | −0.007 … +0.033 |
-| **mean QWK** | **0.708** | **0.779** | **+0.071** |
+| C10 Lesson closure | 0.520 | 0.831 | +0.310 |
+| C06 Introduction/RPK | 0.614 | 0.722 | +0.108 |
+| C08 Attention to all learners | 0.650 | 0.738 | +0.088 |
+| C04 Resources/ICT | 0.655 | 0.691 | +0.036 |
+| other six criteria | — | — | −0.034 … +0.032 |
+| **mean QWK** | **0.729** | **0.783** | **+0.055** |
+
+> **Quote the mean, not the per-criterion deltas.** The same ablation was run on two
+> independently generated 200-plan corpora. The mean gain was stable (+0.051, +0.055) but
+> individual criteria moved by a factor of 2–3 between them: C10 +0.139 → +0.310, C08
+> +0.184 → +0.088, C04 +0.082 → +0.036. Same code, same settings, only the random corpus
+> differed. 200 synthetic plans under 5-fold CV simply do not pin a single criterion down.
+> **The defensible claim is "adding F19–F22 raised mean QWK by roughly 0.05, concentrated on
+> the four criteria they target."** Reporting a per-criterion figure to three decimals
+> implies a precision this design does not have. Fold SD is in the table above; it
+> understates the true variance, which the cross-corpus comparison exposes.
+
+> **Corrected after code review.** An earlier version of this table reported mean +0.071.
+> Two lexicons in `feature_engineer.py` matched by bare substring: `"sen"` matched inside
+> "pre**sen**tation" — the canonical content-section header — so F21 scored ≥1 for
+> essentially every plan, and F19 counted lesson subject-matter ("leaf", "seed", "stone")
+> as teaching resources. Both features were therefore partly constants and the gains
+> attributed to them were inflated. Matching is now whole-word via `_lexicon_pattern`, and
+> `tests/test_format_guard.py` sweeps every lexicon term against common lesson-plan
+> vocabulary so a new short cue cannot reintroduce this. The finding survives at a smaller
+> size; see the variance note above before quoting any single figure.
+
+### Corpus provenance — both channels must be fitted to the same data
+
+Each trainer records a content hash of its training corpus (`model_contract.corpus_fingerprint`,
+over plan ids and rubric scores), and `load_artifacts` compares them. This exists because
+regenerating the synthetic data while reusing a text checkpoint left the two channels fitted
+to different plans, and `predict` blended them into a score **with no warning at all** —
+every existing check passed, because the feature names still matched.
+
+| State | Response |
+|---|---|
+| fingerprints differ | blending disabled, warning, user-facing caveat |
+| only one recorded | fitted weights discarded, warning, "provisional" caveat |
+| both match | silent — the normal case |
+| neither recorded | silent (pre-fingerprint artifacts; refusing would be worse) |
+
+**Retraining either channel invalidates the blend weights.** Refit afterwards:
+`python -m evaluation.blend_weights --labels ... --plans ...`
 
 **These remain synthetic-data numbers and are optimistic.** Quality profiles are
 correlated by design, so a criterion can be partly predicted from features measuring other
@@ -144,17 +182,20 @@ The superseded 8-epoch checkpoint is kept at `artifacts/bert_rubric_e8` for comp
 
 | Criterion | Tabular (5-fold CV) | Text (held-out) |
 |---|---|---|
-| C01 Learning outcomes | **0.886** | 0.773 |
-| C05 Assessment strategies | **0.810** | 0.652 |
-| C07 Lesson sequencing | 0.809 | **0.855** |
-| C09 Concept explanation | **0.798** | 0.797 |
-| C10 Lesson closure | **0.763** | 0.542 |
-| C08 Attention to all learners | **0.761** | 0.698 |
-| C06 Introduction/RPK | **0.747** | 0.627 |
-| C04 Resources/ICT | **0.743** | 0.720 |
-| C03 Teaching & learning strategies | **0.742** | 0.691 |
-| C02 Pedagogical content knowledge | 0.726 | **0.766** |
-| **MEAN** | **0.779** | **0.712** |
+| C01 Learning outcomes | **0.896** | 0.719 |
+| C05 Assessment strategies | **0.854** | 0.746 |
+| C09 Concept explanation | **0.848** | 0.802 |
+| C10 Lesson closure | **0.831** | 0.703 |
+| C07 Lesson sequencing | **0.826** | 0.786 |
+| C02 Pedagogical content knowledge | **0.790** | 0.737 |
+| C08 Attention to all learners | **0.738** | 0.682 |
+| C06 Introduction/RPK | 0.722 | **0.726** |
+| C04 Resources/ICT | 0.691 | **0.740** |
+| C03 Teaching & learning strategies | **0.638** | 0.627 |
+| **MEAN** | **0.783** | **0.727** |
+
+Best val MSE 0.3865 at epoch 8, early-stopped at 11. Both channels are fitted to corpus
+`963d4c91`, recorded in each artifact — see the provenance guard below.
 
 > **Correction — an earlier version of this file claimed the text model beat the tabular
 > model on the four criteria structure could not measure, and called that the
@@ -193,25 +234,26 @@ Fitted structural weights on 46 shared held-out plans:
 
 | Criterion | w_struct | blended RMSE | struct only | text only |
 |---|---|---|---|---|
-| C01 Learning outcomes | 0.80 | **0.421** | 0.435 | 0.599 |
-| C02 Pedagogical content knowledge | **0.18** | **0.474** | 0.580 | 0.480 |
-| C03 Teaching & learning strategies | 0.61 | **0.667** | 0.708 | 0.761 |
-| C04 Resources/ICT | **0.19** | **0.650** | 0.735 | 0.655 |
-| C05 Assessment strategies | 0.84 | **0.565** | 0.576 | 0.797 |
-| C06 Introduction/RPK | **1.00** | 0.525 | 0.525 | 0.736 |
-| C07 Lesson sequencing | 0.88 | **0.380** | 0.382 | 0.474 |
-| C08 Attention to all learners | 0.98 | 0.676 | 0.676 | 0.764 |
-| C09 Concept explanation | 0.49 | **0.514** | 0.556 | 0.554 |
-| C10 Lesson closure | 0.92 | **0.586** | 0.588 | 0.772 |
+| C01 Learning outcomes | 0.92 | **0.383** | 0.386 | 0.599 |
+| C02 Pedagogical content knowledge | 0.69 | **0.465** | 0.491 | 0.585 |
+| C03 Teaching & learning strategies | 0.59 | **0.685** | 0.713 | 0.742 |
+| C04 Resources/ICT | 0.15 | **0.604** | 0.676 | 0.607 |
+| C05 Assessment strategies | 0.61 | **0.460** | 0.518 | 0.588 |
+| C06 Introduction/RPK | 0.48 | **0.600** | 0.652 | 0.645 |
+| C07 Lesson sequencing | 0.81 | **0.496** | 0.502 | 0.601 |
+| C08 Attention to all learners | 0.60 | **0.660** | 0.677 | 0.696 |
+| C09 Concept explanation | 0.53 | **0.395** | 0.436 | 0.444 |
+| C10 Lesson closure | 0.80 | **0.470** | 0.484 | 0.664 |
 
-**The blend beats both channels alone on 8 of 10 criteria** — the ensemble gain is real, and
-it is the only justification for running two models. Mean text weight: 0.45 under
-proportional weighting → **0.31** fitted.
+**The blend beats both channels alone on all ten criteria**, and no fitted weight is 0 or 1
+— both channels contribute everywhere. That is the strongest form of the ensemble argument
+and the only real justification for running two models: their errors are partly
+uncorrelated on every criterion.
 
-On C02 and C04 the text channel is outright *better* than the structural one (RMSE 0.480 vs
-0.580; 0.655 vs 0.735) and the fit gives it ~80% of the weight. C04 is one of the four
-criteria text was originally introduced to rescue — with a properly trained model it does,
-on measured held-out error. On C06 the fit still zeroes text entirely.
+Earlier fits produced weights of exactly 0.00 (C04) and 1.00 (C06), dropping a channel
+outright. Those were fitted across a corpus mismatch — the text checkpoint had been trained
+on data the structural model never saw. The provenance guard now makes that state
+detectable; see below.
 
 Refit after retraining either channel — the weights are only valid for the checkpoints they
 were fitted against:

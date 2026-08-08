@@ -59,21 +59,54 @@ BLEND_REPORT_NAME = "blend_weights.json"
 _GRID = np.linspace(0.0, 1.0, 101)
 
 
-def _assert_shared_holdout(n: int) -> list[int]:
-    from scoring.train_bert_lora import holdout_indices
+def _assert_shared_holdout(n: int, text_model_dir=None) -> list[int]:
+    """The held-out indices, verified against what the text model actually used.
+
+    This must compare against the *persisted* split, not against a recomputation
+    of it. An earlier version called ``holdout_indices(n)`` and compared it to
+    ``validation_mask(n)`` — but the former is a thin wrapper around the latter
+    with the same defaults, so the check was ``x == x`` and could never fail
+    while advertising that it could.
+
+    The risk it is supposed to cover is real: ``train_bert_lora.train`` accepts a
+    config override and ``train_xgboost.train`` takes ``validation_fraction`` as
+    a parameter, so a checkpoint on disk may have been fitted against a
+    different split than the default. ``train_bert_lora.save`` records the
+    indices it used in the manifest, so that is what we read.
+    """
+    from pathlib import Path
+
+    from model_contract import TEXT_MODEL_DIR
+    from scoring.train_bert_lora import MANIFEST_NAME, holdout_indices
     from scoring.train_xgboost import validation_mask
 
-    text_idx = holdout_indices(n)
-    tabular_idx = [int(i) for i in np.where(validation_mask(n))[0]]
-    if text_idx != tabular_idx:
+    expected = [int(i) for i in np.where(validation_mask(n))[0]]
+
+    manifest_path = Path(text_model_dir or TEXT_MODEL_DIR) / MANIFEST_NAME
+    recorded = None
+    if manifest_path.is_file():
+        training = json.loads(manifest_path.read_text(encoding="utf-8")).get(
+            "training", {})
+        if training.get("val_indices") is not None:
+            recorded = [int(i) for i in training["val_indices"]]
+
+    if recorded is None:
+        logger.warning(
+            "%s records no val_indices, so the text checkpoint's split cannot be "
+            "verified — falling back to the default scheme. Blend weights are "
+            "only valid if that checkpoint was trained with it.", manifest_path)
+        return holdout_indices(n)
+
+    if recorded != expected:
         raise ValueError(
-            "The structural and text channels were validated on different "
-            "held-out plans, so their predictions cannot be blended on a common "
-            "set. Align the split scheme in scoring/train_xgboost.train and "
-            "scoring/train_bert_lora.train before fitting blend weights.\n"
-            f"  structural: {len(tabular_idx)} plans\n"
-            f"  text:       {len(text_idx)} plans")
-    return text_idx
+            "The text checkpoint was validated on different plans than the "
+            "structural model, so their predictions cannot be blended on a "
+            "common held-out set.\n"
+            f"  structural (default scheme): {len(expected)} plans\n"
+            f"  text ({manifest_path}):      {len(recorded)} plans\n"
+            f"  overlap: {len(set(expected) & set(recorded))}\n"
+            "Retrain one of them with the same validation_fraction and seed.")
+    return recorded
 
 
 def fit(labels_csv: str | Path, plans_dir: str | Path) -> dict:
@@ -101,11 +134,11 @@ def fit(labels_csv: str | Path, plans_dir: str | Path) -> dict:
         t = text[key].to_numpy(dtype=float)
         y = truth[key].to_numpy(dtype=float)
 
-        errors = [float(np.mean(np.clip(w * s + (1 - w) * t,
-                                        SCORE_MIN, SCORE_MAX) - y) ** 2
-                        + np.var(np.clip(w * s + (1 - w) * t,
-                                         SCORE_MIN, SCORE_MAX) - y))
-                  for w in _GRID]
+        def mse(w: float) -> float:
+            residual = np.clip(w * s + (1 - w) * t, SCORE_MIN, SCORE_MAX) - y
+            return float(np.mean(residual ** 2))
+
+        errors = [mse(w) for w in _GRID]
         best = int(np.argmin(errors))
         w = float(_GRID[best])
         results[key] = {

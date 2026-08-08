@@ -71,6 +71,14 @@ ADDITIVITY_TOLERANCE: float = 1e-3
 #: primary feature" band (>=0.75).
 STRUCTURAL_EVIDENCE_FLOOR: float = 0.30
 
+#: A channel carrying at least this share of the blended score, but supplying no
+#: evidence, earns an explicit caveat. Text attributions are off by default
+#: (~93s), so this is the common case, not an edge case: on C02 the fitted
+#: weights make the score 83% text-driven while the panel can only show
+#: structural bars. Saying nothing there would present a feature breakdown as
+#: the explanation of a score it did not produce.
+UNEXPLAINED_WEIGHT_FLOOR: float = 0.15
+
 
 class Channel(str, Enum):
     STRUCTURAL = "structural"
@@ -146,6 +154,7 @@ class CriterionExplanation:
     structural_weight: float = 0.0
     text_weight: float = 0.0
     confidence: float = 0.0                  # 0-1, how well this criterion is evidenced
+    explained_weight: float = 0.0            # share of the score the evidence accounts for
     evidence: tuple[Contribution, ...] = ()
     caveats: tuple[str, ...] = ()
 
@@ -181,6 +190,7 @@ class CriterionExplanation:
                          "weight": round(self.text_weight, 3)},
             },
             "confidence": round(self.confidence, 3),
+            "explained_weight": round(self.explained_weight, 3),
             "is_explainable": self.is_explainable,
             "evidence": [c.to_dict() for c in self.evidence],
             "caveats": list(self.caveats),
@@ -342,16 +352,34 @@ def _format_value(value: float, unit: str) -> str:
 
 def _interleave(contributions: list[Contribution], top_k: int,
                 active_channels: set[Channel]) -> tuple[Contribution, ...]:
-    """Top-k by rank score, but never silently drop an entire active channel."""
+    """Top-k by rank score, but never silently drop an entire active channel.
+
+    Slots for each channel's best contribution are reserved *before* filling the
+    remainder. Topping up afterwards by evicting the last item did the opposite
+    of what it promised: at top_k=1 with both channels active it evicted the
+    only structural row to make room for text, leaving the panel showing one
+    channel — the very outcome this exists to prevent.
+    """
+    if top_k <= 0:
+        return ()
+
     ranked = sorted(contributions, key=lambda c: c.rank_score, reverse=True)
-    chosen = [c for c in ranked[:top_k]]
-    represented = {c.channel for c in chosen}
-    for channel in active_channels - represented:
-        best = next((c for c in ranked if c.channel == channel), None)
-        if best is not None:
-            if len(chosen) >= top_k and chosen:
-                chosen.pop()
-            chosen.append(best)
+
+    # Sorted for determinism: iterating a set of str-Enum members is
+    # PYTHONHASHSEED-dependent, which would make the panel vary between runs.
+    reserved: list[Contribution] = []
+    for channel in sorted(active_channels, key=lambda c: c.value):
+        best = next((c for c in ranked if c.channel is channel), None)
+        if best is not None and len(reserved) < top_k:
+            reserved.append(best)
+
+    chosen = list(reserved)
+    for contribution in ranked:
+        if len(chosen) >= top_k:
+            break
+        if contribution not in chosen:
+            chosen.append(contribution)
+
     return tuple(sorted(chosen, key=lambda c: c.rank_score, reverse=True))
 
 
@@ -442,8 +470,16 @@ def reconcile_criterion(
                           if structural_reliability is None
                           else structural_reliability)
     text_quality = TEXT_CHANNEL_PRIOR if text_reliability is None else text_reliability
-    confidence = (w_structural * structural_quality
-                  + w_text * text_quality) if active else 0.0
+
+    # Share of the blended score whose channel actually supplied evidence. A
+    # channel can vote on the score without explaining it — the text model does
+    # exactly that whenever attributions are off — and confidence must reflect
+    # how much of the score the visible evidence accounts for, not merely how
+    # good the channels are.
+    explained_weight = ((w_structural if Channel.STRUCTURAL in active else 0.0)
+                        + (w_text if Channel.TEXT in active else 0.0))
+    quality = w_structural * structural_quality + w_text * text_quality
+    confidence = quality * explained_weight if active else 0.0
 
     # --- caveats ---
     if criterion_key in uncovered_criteria():
@@ -463,6 +499,21 @@ def reconcile_criterion(
             f"{target.label} is only indirectly measured by the structural "
             f"features; treat the breakdown as indicative.")
 
+    # A channel that voted on the score but explained none of it.
+    if (text_available and Channel.TEXT not in active
+            and w_text >= UNEXPLAINED_WEIGHT_FLOOR):
+        caveats.append(
+            f"{w_text:.0%} of this score comes from the text model, and that "
+            f"part is not broken down below — the contributions shown are from "
+            f"the structural features only. Turn on text attributions for the "
+            f"whole picture.")
+    if (structural_available and Channel.STRUCTURAL not in active
+            and w_structural >= UNEXPLAINED_WEIGHT_FLOOR):
+        caveats.append(
+            f"{w_structural:.0%} of this score comes from the structural "
+            f"features, which do not measure this criterion directly and are "
+            f"therefore not shown.")
+
     if not text_available:
         caveats.append("Text model not loaded — structural channel only.")
     elif text_token_count is not None and text_token_count > TEXT_MAX_TOKENS:
@@ -481,6 +532,7 @@ def reconcile_criterion(
         structural_weight=w_structural,
         text_weight=w_text,
         confidence=confidence,
+        explained_weight=explained_weight,
         evidence=_interleave(contributions, top_k, active),
         caveats=tuple(caveats),
     )

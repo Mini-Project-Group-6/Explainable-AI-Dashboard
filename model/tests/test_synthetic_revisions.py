@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 
 from data.synthetic import (
+    RUN_ON_FILLER,
     generate_revision_pair,
     generate_revisions,
     write_revisions,
@@ -72,6 +73,55 @@ class TestRevisionPair(unittest.TestCase):
     def test_text_actually_changes(self):
         pair = generate_revision_pair(seed=11, pair_id="rev_0011")
         self.assertNotEqual(pair.before.text, pair.after.text)
+
+    def test_only_the_improved_criteria_change_text(self):
+        """Blocks for unchanged criteria must be byte-identical.
+
+        With one shared generator they were not: blocks consume a
+        score-dependent number of draws, so the first changed criterion knocked
+        every later block off-stream and rewrote it. A before/after pair whose
+        unchanged sections move is useless for measuring a known delta.
+        """
+        block_of = {
+            "resources_including_ict": "RESOURCES:",
+            "attention_to_all_learners": "DIFFERENTIATION:",
+            "lesson_closure": "CLOSURE:",
+            "learning_outcomes": "OBJECTIVES:",
+            "assessment_strategies_in_plan": "EVALUATION:",
+        }
+
+        def section(text: str, header: str) -> str:
+            """The named block, with the run-on filler stripped.
+
+            _apply_language_quality is a document-wide pass: it walks the joined
+            text line by line, so once any block's length changes the filler
+            lands on different lines everywhere. That is by design — writing
+            quality is a property of the whole plan — and it is not the
+            block-stream property under test here, so it is normalised away.
+            """
+            if header not in text:
+                return ""
+            after = text.split(header, 1)[1].split("\n\n", 1)[0]
+            # The filler pass rewrites a line as rstrip(".") + filler + ".", so
+            # removing the filler leaves punctuation that depends on how the
+            # original line happened to end. Normalise both sides identically.
+            return "\n".join(
+                line.replace(RUN_ON_FILLER, "").rstrip(" .")
+                for line in after.splitlines())
+
+        checked = 0
+        for seed in range(30):
+            pair = generate_revision_pair(seed=seed, pair_id=f"rev_{seed:04d}")
+            for dimension, header in block_of.items():
+                if dimension in pair.improved:
+                    continue
+                self.assertEqual(
+                    section(pair.before.text, header),
+                    section(pair.after.text, header),
+                    f"seed {seed}: {dimension} score is unchanged but its "
+                    f"{header} block was rewritten")
+                checked += 1
+        self.assertGreater(checked, 20)
 
     def test_deterministic(self):
         first = generate_revision_pair(seed=5, pair_id="rev_0005")

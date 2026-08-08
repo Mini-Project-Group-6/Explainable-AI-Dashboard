@@ -92,6 +92,10 @@ class TextRubricExplainer:
         self.max_evals = max_evals
         self.fixed_context = fixed_context
         self.criterion_keys = tuple(scorer.criterion_keys)
+        # Single-entry, keyed by plan text: the dashboard explains one
+        # submission at a time, and holding more than one plan's spans would
+        # grow without bound in a long-lived Streamlit session.
+        self._cache: dict[str, dict[str, list[SpanAttribution]]] = {}
 
         self._masker = shap.maskers.Text(GRANULARITY_PATTERNS[granularity])
         self._explainer = shap.Explainer(
@@ -118,10 +122,19 @@ class TextRubricExplainer:
                     ) -> dict[str, list[SpanAttribution]]:
         """criterion key -> attributed spans, ranked by absolute value.
 
+        One explainer run produces all ten criteria at once, and the result is
+        cached against *text*: a caller iterating criteria (see ``top_spans``)
+        would otherwise pay ~93s ten times over for data a single run already
+        computed.
+
         Args:
             min_abs_value: drop spans whose attribution is below this, to keep
                 the panel readable. 0 keeps everything.
         """
+        cached = self._cache.get(text)
+        if cached is not None and min_abs_value == 0.0:
+            return cached
+
         explanation = self.explain([text])[0]
         segments = [str(s) for s in explanation.data]
         offsets = _locate(text, segments)
@@ -144,11 +157,19 @@ class TextRubricExplainer:
                 ))
             spans.sort(key=lambda s: abs(s.value), reverse=True)
             by_criterion[key] = spans
+
+        if min_abs_value == 0.0:
+            # Only the unfiltered result is cacheable; a filtered one is not a
+            # substitute for a later call with a lower threshold.
+            self._cache = {text: by_criterion}
         return by_criterion
 
     def top_spans(self, text: str, criterion_key: str, k: int = 5
                   ) -> list[SpanAttribution]:
-        """The k most influential spans for one criterion."""
+        """The k most influential spans for one criterion.
+
+        Cheap after the first call for a given text — see ``explain_one``.
+        """
         return self.explain_one(text)[criterion_key][:k]
 
     def token_count(self, text: str) -> int:

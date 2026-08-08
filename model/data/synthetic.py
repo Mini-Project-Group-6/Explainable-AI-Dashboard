@@ -388,22 +388,37 @@ def generate_plan(rng: random.Random, plan_id: str,
 
     validate_scores(scores)
 
+    # Drawn before anything else so two plans built from equally-seeded
+    # generators share it regardless of what their scores make them render.
+    plan_seed = rng.getrandbits(64)
+
     subject = rng.choice(list(TOPICS))
     topic, keywords = rng.choice(TOPICS[subject])
     kws = list(keywords)
     rng.shuffle(kws)
 
+    # Each block draws from its own stream, derived from the plan seed and the
+    # block name. Sharing one generator made every block's text depend on how
+    # many draws the *earlier* blocks happened to make, which is score-
+    # dependent — so in a revision pair, changing one criterion silently
+    # rewrote every block after it, including criteria whose score was
+    # identical. Revision deltas have to be the labelled ones.
+    def block_rng(name: str) -> random.Random:
+        return random.Random(f"{plan_seed}:{name}")
+
     with_time = scores["lesson_sequencing"] >= 3
-    duration = rng.choice([60, 70, 80])
+    header_rng = block_rng("header")
+    duration = header_rng.choice([60, 70, 80])
     # Stated vs allocated consistency degrades with the sequencing score.
-    stated = duration if scores["lesson_sequencing"] >= 3 else int(duration * rng.choice([1.5, 0.6]))
+    stated = (duration if scores["lesson_sequencing"] >= 3
+              else int(duration * header_rng.choice([1.5, 0.6])))
 
     header = "\n".join([
         f"SUBJECT: {subject}",
         f"TOPIC: {topic}",
-        f"CLASS: JHS {rng.choice([1, 2, 3])}",
+        f"CLASS: JHS {header_rng.choice([1, 2, 3])}",
         f"DURATION: {stated} minutes",
-        f"CLASS SIZE: {rng.randint(25, 55)}",
+        f"CLASS SIZE: {header_rng.randint(25, 55)}",
     ])
 
     # Written quality is tied to the criterion F17/F18 actually map to. Deriving
@@ -414,21 +429,22 @@ def generate_plan(rng: random.Random, plan_id: str,
 
     parts = [
         header,
-        _objectives_block(rng, scores["learning_outcomes"], kws, topic),
+        _objectives_block(block_rng("objectives"), scores["learning_outcomes"], kws, topic),
         _pedagogical_content_block(scores["pedagogical_content_knowledge"], kws),
-        _resources_block(rng, scores["resources_including_ict"], kws),
-        _intro_block(rng, scores["lesson_introduction_rpk"], topic, kws),
-        _content_block(rng, scores["pedagogical_content_knowledge"], topic, kws),
-        _activities_block(rng, scores["teaching_learning_strategies"], kws, with_time),
-        _assessment_block(rng, scores["assessment_strategies_in_plan"], kws),
-        _differentiation_block(rng, scores["attention_to_all_learners"]),
+        _resources_block(block_rng("resources"), scores["resources_including_ict"], kws),
+        _intro_block(block_rng("intro"), scores["lesson_introduction_rpk"], topic, kws),
+        _content_block(block_rng("content"), scores["pedagogical_content_knowledge"], topic, kws),
+        _activities_block(block_rng("activities"), scores["teaching_learning_strategies"], kws, with_time),
+        _assessment_block(block_rng("assessment"), scores["assessment_strategies_in_plan"], kws),
+        _differentiation_block(block_rng("differentiation"), scores["attention_to_all_learners"]),
         _explanation_block(scores["concept_explanation_examples"], kws),
         _sequencing_block(scores["lesson_sequencing"], with_time),
-        _closure_block(rng, scores["lesson_closure"]),
+        _closure_block(block_rng("closure"), scores["lesson_closure"]),
     ]
     # Weak plans can omit the introduction or closure entirely.
     parts = [part for part in parts if part.strip()]
-    text = _apply_language_quality(rng, "\n\n".join(parts), language_quality)
+    text = _apply_language_quality(block_rng("language"), "\n\n".join(parts),
+                                   language_quality)
     return SyntheticPlan(plan_id=plan_id, text=text, scores=scores,
                          subject=subject, topic=topic)
 
@@ -489,8 +505,13 @@ def generate_revision_pair(seed: int, pair_id: str,
         after_scores[dimension] = min(4, before_scores[dimension]
                                       + chooser.choice([1, 1, 2]))
 
-    # Fresh generators from the same seed: identical subject/topic/keywords,
-    # divergence only where the quality profile actually differs.
+    # Same seed, but that alone is not enough. Blocks consume a score-dependent
+    # number of draws, so the first criterion that changes knocks every later
+    # block off-stream and an *unchanged* criterion's text is regenerated
+    # differently anyway. Objective 24 and S5's before/after analysis need the
+    # delta to be the labelled one, not generator noise, so each plan is
+    # rendered with its own generator seeded identically and the block-level
+    # streams are re-derived per block inside generate_plan.
     before = generate_plan(random.Random(seed), f"{pair_id}_v1", before_scores)
     after = generate_plan(random.Random(seed), f"{pair_id}_v2", after_scores)
     return RevisionPair(pair_id=pair_id, before=before, after=after,

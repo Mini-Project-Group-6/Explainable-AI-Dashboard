@@ -31,7 +31,8 @@ from __future__ import annotations
 import html
 from typing import Iterable, Optional, Sequence
 
-from model_contract import CRITERIA, N_CRITERIA, Artifacts, criterion
+from model_contract import CRITERIA, N_CRITERIA, N_FEATURES, Artifacts, criterion
+from rubric_schema import RUBRIC_BANDS
 from explainability.feature_labels import (
     FEATURE_LABELS,
     coverage_report,
@@ -51,22 +52,31 @@ POSITIVE_COLOUR = "#2166AC"   # raises the score
 NEGATIVE_COLOUR = "#B2182B"   # lowers the score
 NEUTRAL_COLOUR = "#6B7280"
 
-BAND_LABELS: tuple[tuple[float, str], ...] = (
-    (85.0, "Outstanding"),
-    (70.0, "Good"),
-    (50.0, "Minimum level of practice"),
-    (0.0, "Inadequate"),
+#: Display names derived from rubric_schema.RUBRIC_BANDS, never restated. A
+#: second hand-written copy of the thresholds would drift silently the first
+#: time the rubric changed — the same failure model_contract._self_check and
+#: feature_labels._self_check exist to prevent for the feature and criterion
+#: lists. Sorted by lower bound, highest first.
+BAND_LABELS: tuple[tuple[float, str], ...] = tuple(
+    (float(low), key.replace("_", " ").capitalize())
+    for key, (low, _high) in sorted(
+        RUBRIC_BANDS.items(), key=lambda kv: kv[1][0], reverse=True)
 )
 
 
 def band_for(score_0_100: Optional[float]) -> str:
-    """Rubric band name for an overall 0-100 score."""
+    """Rubric band name for an overall 0-100 score.
+
+    Uses `>= lower bound` rather than the bands' closed intervals, so a
+    continuous score between two bands (84.5, which falls in no RUBRIC_BANDS
+    interval) still resolves instead of returning nothing.
+    """
     if score_0_100 is None:
         return "Not scored"
     for threshold, name in BAND_LABELS:
         if score_0_100 >= threshold:
             return name
-    return "Inadequate"
+    return BAND_LABELS[-1][1]
 
 
 # --------------------------------------------------------------------------
@@ -415,8 +425,8 @@ def st_beeswarm(explanation, criterion_label: str = "") -> None:
 
     from explainability.shap_tree import _with_readable_labels
 
-    shap.plots.beeswarm(_with_readable_labels(explanation), max_display=18,
-                        show=False)
+    shap.plots.beeswarm(_with_readable_labels(explanation),
+                        max_display=N_FEATURES, show=False)
     figure = plt.gcf()
     if criterion_label:
         figure.suptitle(criterion_label)

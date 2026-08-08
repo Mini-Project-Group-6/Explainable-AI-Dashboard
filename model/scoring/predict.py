@@ -136,7 +136,20 @@ class RubricScorer:
         from evaluation.cross_validate import load_structural_reliability
         self.structural_reliability = load_structural_reliability() or None
         # Fitted weights win where they exist; reliability is the fallback.
+        # But weights fitted against a different pairing of checkpoints are
+        # worse than no weights at all, so a corpus mismatch discards them.
         self.blend_weights = load_blend_weights() or None
+        if self.blend_weights and not self.artifacts.channels_consistent:
+            logger.warning(
+                "Discarding fitted blend weights: the structural and text "
+                "checkpoints were trained on different corpora.")
+            self.blend_weights = None
+        elif self.blend_weights and self.artifacts.provenance_unverified:
+            logger.warning(
+                "Discarding fitted blend weights: one checkpoint records no "
+                "training corpus, so the pairing the weights were fitted "
+                "against cannot be confirmed.")
+            self.blend_weights = None
 
         self.explainer = None
         if with_shap:
@@ -233,10 +246,24 @@ class RubricScorer:
 
         # A plan the segmenter could not read produces near-zero features and
         # would otherwise be reported as a very poor lesson. Say so instead.
+        plan_caveats: list[str] = []
+        if not self.artifacts.channels_consistent:
+            plan_caveats.append(
+                "The structural and text models were trained on different data, "
+                "so the blended scores below are not reliable. Retrain the stale "
+                "channel before using these results.")
+        elif self.text_scorer is not None and self.artifacts.provenance_unverified:
+            plan_caveats.append(
+                "One of the two models does not record which data it was trained "
+                "on, so the two cannot be confirmed to match. Treat the blended "
+                "scores as provisional.")
         if not plan.format_recognised:
+            plan_caveats.append(plan.format_warning)
+        if plan_caveats:
             explanation = replace(
                 explanation,
-                caveats=(plan.format_warning,) + tuple(explanation.caveats))
+                caveats=tuple(plan_caveats) + tuple(explanation.caveats))
+        if not plan.format_recognised:
             logger.warning("%s: only %d/%d sections recognised",
                            plan.source_path, plan.sections_found,
                            len(EXPECTED_SECTIONS))
@@ -245,6 +272,7 @@ class RubricScorer:
             explanation, features,
             raw_text=plan.raw_text,
             missing_sections=plan.missing_sections,
+            format_recognised=plan.format_recognised,
             max_total=max_suggestions)
 
         scores = {item.criterion.key: item.rounded_score

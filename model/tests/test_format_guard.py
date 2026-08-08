@@ -90,5 +90,55 @@ class TestFormatGuard(unittest.TestCase):
         self.assertLess(SECTION_RECOGNITION_FLOOR, len(EXPECTED_SECTIONS) / 2)
 
 
+class TestLexiconWordBoundaries(unittest.TestCase):
+    """Regression guard for a bug that made two v0.3 features near-constants.
+
+    The lexicons were matched with ``term in text``. "sen" therefore matched
+    inside "preSENtation" — the canonical header of the content section — so
+    every ordinary plan scored a differentiation strategy, and F19 counted a
+    science lesson's own subject matter as teaching resources. Both features
+    were partly constant and the QWK gains attributed to them were inflated.
+    """
+
+    def test_lexicon_pattern_will_not_match_inside_a_word(self):
+        from ingestion.feature_engineer import _lexicon_pattern
+
+        pattern = _lexicon_pattern(("sen", "ict", "chalk"))
+        for hiding_place in ("presentation", "absent", "sentence", "predict",
+                             "conflict", "chalkboard"):
+            self.assertIsNone(pattern.search(hiding_place),
+                              f"matched inside {hiding_place!r}")
+        for genuine in ("SEN provision", "uses ICT daily", "chalk and duster"):
+            self.assertIsNotNone(pattern.search(genuine), genuine)
+
+    def test_longest_term_wins(self):
+        from ingestion.feature_engineer import _lexicon_pattern
+
+        pattern = _lexicon_pattern(("measuring tape", "measuring"))
+        self.assertEqual(pattern.search("a measuring tape").group(0),
+                         "measuring tape")
+
+    def test_no_lexicon_term_hides_inside_a_common_word(self):
+        # Catches a new short cue being added without word-boundary safety.
+        from ingestion.feature_engineer import (
+            DIFFERENTIATION_STRATEGIES,
+            ICT_NOUNS,
+            RESOURCE_NOUNS,
+            _lexicon_pattern,
+        )
+
+        haystack = ("presentation objectives assessment evaluation introduction "
+                    "differentiation activities photosynthesis conflict absent")
+        terms = set(RESOURCE_NOUNS) | set(ICT_NOUNS)
+        for cues in DIFFERENTIATION_STRATEGIES.values():
+            terms |= set(cues)
+        for term in terms:
+            if term in haystack:          # a legitimate whole-word appearance
+                continue
+            self.assertIsNone(
+                _lexicon_pattern((term,)).search(haystack),
+                f"{term!r} matches inside a common lesson-plan word")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
