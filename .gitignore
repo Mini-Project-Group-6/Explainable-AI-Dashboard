@@ -1,3 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Model artifacts & generated data (regenerable — do not commit)
+# Generated datasets live in model/data/<name>/; the generator source does not.
+model/artifacts/
+model/data/*/
+!model/data/*.py
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+.claude
 .env
 __pycache__/
 *.pyc
