@@ -1,0 +1,201 @@
+plan_id,subject,topic,is_synthetic,learning_outcomes,pedagogical_content_knowledge,teaching_learning_strategies,resources_including_ict,assessment_strategies_in_plan,lesson_introduction_rpk,lesson_sequencing,attention_to_all_learners,concept_explanation_examples,lesson_closure
+synth_0000,Integrated Science,The Water Cycle,1,3,3,4,4,4,4,3,3,4,3
+synth_0001,Mathematics,Fractions,1,4,4,4,4,3,4,4,4,4,4
+synth_0002,Integrated Science,Simple Machines,1,2,1,3,1,3,1,2,2,2,1
+synth_0003,Mathematics,Percentages,1,3,3,3,3,3,3,2,3,3,3
+synth_0004,English Language,Comprehension Skills,1,1,1,1,2,1,1,1,1,1,2
+synth_0005,Integrated Science,States of Matter,1,4,4,4,4,4,4,4,3,3,3
+synth_0006,English Language,Comprehension Skills,1,3,2,2,3,3,2,3,4,3,4
+synth_0007,Mathematics,Fractions,1,4,4,4,4,4,3,4,4,3,3
+synth_0008,Mathematics,Percentages,1,2,1,1,1,2,1,1,2,1,1
+synth_0009,Integrated Science,Simple Machines,1,1,1,1,1,1,1,1,1,1,1
+synth_0010,Mathematics,Percentages,1,2,3,2,3,3,2,1,1,3,2
+synth_0011,Integrated Science,States of Matter,1,1,1,1,2,1,2,1,1,2,1
+synth_0012,Mathematics,Area of Plane Shapes,1,1,1,2,2,2,1,2,1,1,2
+synth_0013,English Language,Nouns and Pronouns,1,2,2,2,1,1,2,1,1,3,2
+synth_0014,Integrated Science,Simple Machines,1,2,3,2,2,4,3,3,3,3,3
+synth_0015,English Language,Comprehension Skills,1,2,2,3,3,3,3,2,3,3,3
+synth_0016,English Language,Comprehension Skills,1,3,4,4,3,3,4,4,4,4,4
+synth_0017,Integrated Science,Photosynthesis,1,2,1,1,1,1,1,1,1,2,2
+synth_0018,Mathematics,Percentages,1,3,2,3,3,2,3,3,3,2,3
+synth_0019,Integrated Science,The Water Cycle,1,2,3,3,4,3,3,3,2,4,2
+synth_0020,Mathematics,Fractions,1,1,2,1,1,1,1,1,2,1,1
+synth_0021,English Language,Nouns and Pronouns,1,4,3,3,4,2,4,3,3,2,4
+synth_0022,Mathematics,Percentages,1,3,2,3,3,4,3,4,3,3,3
+synth_0023,Mathematics,Percentages,1,2,2,3,2,3,3,3,2,3,2
+synth_0024,English Language,Nouns and Pronouns,1,4,4,4,4,3,3,4,4,3,4
+synth_0025,Mathematics,Percentages,1,1,1,3,2,2,3,1,2,1,3
+synth_0026,English Language,Comprehension Skills,1,4,3,4,4,3,3,3,4,3,3
+synth_0027,Mathematics,Area of Plane Shapes,1,2,3,3,3,4,3,3,2,4,4
+synth_0028,Mathematics,Fractions,1,4,4,2,3,3,4,4,3,4,3
+synth_0029,Mathematics,Area of Plane Shapes,1,4,4,4,3,4,3,3,4,4,4
+synth_0030,English Language,Nouns and Pronouns,1,3,4,3,2,4,2,2,3,3,2
+synth_0031,Integrated Science,Photosynthesis,1,2,3,1,2,3,2,2,2,1,2
+synth_0032,Mathematics,Area of Plane Shapes,1,1,1,1,1,1,1,2,1,1,1
+synth_0033,Integrated Science,Simple Machines,1,4,4,4,4,4,4,4,4,4,4
+synth_0034,English Language,Comprehension Skills,1,1,3,2,2,3,2,2,2,2,2
+synth_0035,English Language,Nouns and Pronouns,1,1,2,2,1,2,2,2,1,1,1
+synth_0036,English Language,Nouns and Pronouns,1,3,3,4,3,3,3,3,2,3,3
+synth_0037,English Language,Comprehension Skills,1,1,1,1,1,1,1,1,1,1,1
+synth_0038,Mathematics,Area of Plane Shapes,1,3,4,4,4,3,3,2,3,4,2
+synth_0039,Mathematics,Area of Plane Shapes,1,3,2,3,2,4,3,4,4,4,3
+synth_0040,English Language,Comprehension Skills,1,2,2,1,2,2,2,1,2,1,3
+synth_0041,Integrated Science,Photosynthesis,1,4,4,3,4,4,4,4,3,4,4
+synth_0042,Integrated Science,Photosynthesis,1,3,4,3,4,4,2,2,4,3,3
+synth_0043,Integrated Science,The Water Cycle,1,4,3,3,4,4,2,4,3,4,3
+synth_0044,Integrated Science,Simple Machines,1,2,4,2,3,3,3,2,4,2,4
+synth_0045,Integrated Science,The Water Cycle,1,2,2,3,3,1,1,2,2,2,1
+synth_0046,English Language,Nouns and Pronouns,1,3,3,4,4,4,3,4,3,4,3
+synth_0047,Integrated Science,The Water Cycle,1,1,1,2,1,2,2,1,1,2,2
+synth_0048,Mathematics,Fractions,1,3,3,3,2,3,1,2,2,1,3
+synth_0049,Integrated Science,Simple Machines,1,2,1,1,2,1,1,2,1,2,1
+synth_0050,English Language,Comprehension Skills,1,3,3,2,2,3,2,3,3,3,4
+synth_0051,Mathematics,Area of Plane Shapes,1,2,1,2,1,1,2,1,2,1,1
+synth_0052,Mathematics,Percentages,1,2,3,2,3,2,2,3,3,1,2
+synth_0053,English Language,Nouns and Pronouns,1,1,1,3,2,2,2,2,2,2,2
+synth_0054,Mathematics,Area of Plane Shapes,1,4,3,4,4,4,4,4,4,4,4
+synth_0055,English Language,Comprehension Skills,1,2,3,2,1,3,1,2,1,3,2
+synth_0056,Integrated Science,Simple Machines,1,1,2,1,1,1,1,2,1,2,1
+synth_0057,Integrated Science,States of Matter,1,4,3,4,3,4,2,4,4,3,2
+synth_0058,Mathematics,Fractions,1,3,2,4,3,3,2,4,2,3,2
+synth_0059,Integrated Science,The Water Cycle,1,3,3,3,3,2,3,3,3,3,3
+synth_0060,Integrated Science,States of Matter,1,1,1,1,1,2,1,1,2,2,1
+synth_0061,Integrated Science,Photosynthesis,1,2,2,4,4,4,2,4,4,2,2
+synth_0062,English Language,Nouns and Pronouns,1,4,2,2,3,4,4,3,4,3,4
+synth_0063,English Language,Comprehension Skills,1,2,3,1,1,1,1,3,1,2,2
+synth_0064,English Language,Comprehension Skills,1,3,4,4,4,3,4,4,4,4,3
+synth_0065,English Language,Comprehension Skills,1,2,3,2,3,3,3,3,3,2,3
+synth_0066,Integrated Science,The Water Cycle,1,1,2,2,2,1,1,1,1,1,1
+synth_0067,English Language,Comprehension Skills,1,4,4,4,4,4,4,3,4,4,3
+synth_0068,English Language,Comprehension Skills,1,2,2,3,3,3,3,3,3,3,2
+synth_0069,English Language,Comprehension Skills,1,3,2,4,2,4,2,4,2,3,4
+synth_0070,Mathematics,Percentages,1,2,3,2,1,3,1,2,3,3,1
+synth_0071,Integrated Science,Photosynthesis,1,2,3,3,3,3,3,2,3,3,3
+synth_0072,Integrated Science,Simple Machines,1,4,4,4,4,3,4,4,4,4,3
+synth_0073,Mathematics,Fractions,1,1,1,3,3,1,3,2,2,3,2
+synth_0074,Integrated Science,Simple Machines,1,1,2,2,1,1,1,1,2,2,1
+synth_0075,Mathematics,Percentages,1,2,2,2,1,2,2,2,3,2,1
+synth_0076,Integrated Science,Photosynthesis,1,3,2,3,3,3,3,3,4,3,3
+synth_0077,Integrated Science,States of Matter,1,3,4,3,3,3,3,4,2,4,3
+synth_0078,Integrated Science,Simple Machines,1,3,2,2,3,3,2,3,3,2,2
+synth_0079,Mathematics,Fractions,1,3,4,3,4,4,4,4,4,3,4
+synth_0080,Mathematics,Percentages,1,3,1,2,2,1,2,1,2,2,2
+synth_0081,Mathematics,Percentages,1,1,1,1,1,2,1,1,1,1,1
+synth_0082,Integrated Science,Simple Machines,1,2,3,3,3,4,2,3,3,4,3
+synth_0083,Mathematics,Percentages,1,2,1,1,1,1,1,1,1,1,1
+synth_0084,Mathematics,Percentages,1,4,4,3,4,3,4,4,3,4,3
+synth_0085,Mathematics,Area of Plane Shapes,1,4,4,4,3,4,4,3,4,4,4
+synth_0086,English Language,Comprehension Skills,1,2,1,2,1,1,1,1,1,1,1
+synth_0087,English Language,Comprehension Skills,1,1,2,1,1,1,2,1,1,1,1
+synth_0088,English Language,Comprehension Skills,1,4,4,4,3,4,4,4,4,4,3
+synth_0089,Mathematics,Percentages,1,1,1,2,3,3,1,2,2,3,2
+synth_0090,English Language,Nouns and Pronouns,1,3,4,2,3,3,2,3,3,3,3
+synth_0091,English Language,Nouns and Pronouns,1,1,1,2,1,1,1,1,2,2,2
+synth_0092,English Language,Nouns and Pronouns,1,4,4,4,4,4,3,3,4,4,4
+synth_0093,English Language,Comprehension Skills,1,2,2,2,1,2,2,2,2,1,1
+synth_0094,Mathematics,Area of Plane Shapes,1,3,3,4,3,4,3,4,2,2,3
+synth_0095,Integrated Science,Photosynthesis,1,4,4,4,4,3,4,4,4,3,4
+synth_0096,English Language,Comprehension Skills,1,2,2,2,3,3,3,2,3,1,1
+synth_0097,Mathematics,Area of Plane Shapes,1,1,1,2,2,1,1,1,2,1,1
+synth_0098,Mathematics,Percentages,1,2,1,3,3,2,1,2,1,3,2
+synth_0099,Mathematics,Fractions,1,2,2,2,3,3,4,4,3,3,3
+synth_0100,Mathematics,Percentages,1,4,3,4,2,3,3,2,4,3,2
+synth_0101,Integrated Science,States of Matter,1,4,3,4,3,3,2,2,3,2,4
+synth_0102,English Language,Comprehension Skills,1,3,4,4,4,4,4,4,4,4,4
+synth_0103,English Language,Comprehension Skills,1,2,2,2,2,2,3,2,3,2,2
+synth_0104,English Language,Nouns and Pronouns,1,1,1,1,2,1,2,1,1,1,1
+synth_0105,Integrated Science,Simple Machines,1,1,2,1,2,1,1,1,1,2,2
+synth_0106,English Language,Nouns and Pronouns,1,2,3,4,3,2,4,4,3,3,2
+synth_0107,Mathematics,Percentages,1,3,2,2,1,2,2,3,2,2,1
+synth_0108,Integrated Science,States of Matter,1,3,2,4,2,3,3,4,3,3,2
+synth_0109,Mathematics,Area of Plane Shapes,1,2,2,1,1,3,2,2,3,2,1
+synth_0110,Integrated Science,Photosynthesis,1,3,2,3,3,2,2,1,3,2,1
+synth_0111,Mathematics,Percentages,1,2,3,1,2,3,1,3,1,3,2
+synth_0112,Integrated Science,Photosynthesis,1,3,4,4,3,4,3,3,4,4,3
+synth_0113,English Language,Comprehension Skills,1,4,4,4,4,4,4,3,4,4,3
+synth_0114,English Language,Nouns and Pronouns,1,1,1,2,2,2,1,1,2,1,1
+synth_0115,Integrated Science,The Water Cycle,1,1,1,2,1,1,1,2,2,1,1
+synth_0116,Mathematics,Percentages,1,3,3,3,3,3,4,3,3,2,3
+synth_0117,English Language,Nouns and Pronouns,1,3,4,4,3,3,4,3,4,3,3
+synth_0118,English Language,Nouns and Pronouns,1,3,3,3,3,2,4,3,2,3,2
+synth_0119,Mathematics,Area of Plane Shapes,1,2,1,2,2,1,3,2,2,3,2
+synth_0120,Integrated Science,The Water Cycle,1,3,3,1,3,2,2,2,2,3,1
+synth_0121,Mathematics,Fractions,1,2,2,3,2,3,2,2,3,3,3
+synth_0122,Mathematics,Area of Plane Shapes,1,2,2,2,2,4,3,3,2,3,2
+synth_0123,English Language,Nouns and Pronouns,1,1,2,1,1,1,1,1,2,1,1
+synth_0124,Mathematics,Percentages,1,2,3,4,4,3,3,3,2,2,2
+synth_0125,English Language,Comprehension Skills,1,2,2,1,1,1,1,1,2,1,1
+synth_0126,Integrated Science,Photosynthesis,1,1,1,2,1,1,1,1,2,1,2
+synth_0127,Mathematics,Area of Plane Shapes,1,1,2,3,2,1,2,3,3,2,2
+synth_0128,Mathematics,Area of Plane Shapes,1,1,1,2,2,3,2,3,2,2,1
+synth_0129,Mathematics,Area of Plane Shapes,1,3,3,3,1,1,1,2,1,2,3
+synth_0130,Mathematics,Area of Plane Shapes,1,4,4,4,4,4,4,4,4,3,4
+synth_0131,Mathematics,Area of Plane Shapes,1,4,4,4,3,4,4,3,4,4,4
+synth_0132,Mathematics,Area of Plane Shapes,1,3,4,3,3,4,3,3,4,3,3
+synth_0133,English Language,Nouns and Pronouns,1,3,4,4,4,4,3,4,4,4,4
+synth_0134,Integrated Science,States of Matter,1,4,4,4,2,3,2,2,3,3,3
+synth_0135,Mathematics,Fractions,1,2,2,3,2,3,3,2,2,1,3
+synth_0136,English Language,Nouns and Pronouns,1,3,2,3,2,3,1,3,3,2,1
+synth_0137,Mathematics,Area of Plane Shapes,1,4,4,4,4,4,4,4,4,4,4
+synth_0138,Mathematics,Percentages,1,2,3,3,3,2,2,3,3,3,3
+synth_0139,Mathematics,Fractions,1,4,2,3,3,4,3,3,2,3,3
+synth_0140,Integrated Science,Simple Machines,1,4,4,3,4,4,3,4,3,3,4
+synth_0141,Integrated Science,The Water Cycle,1,3,3,4,4,4,4,4,4,4,3
+synth_0142,English Language,Nouns and Pronouns,1,3,3,1,1,2,2,1,3,2,3
+synth_0143,English Language,Comprehension Skills,1,2,1,1,1,1,2,1,1,1,1
+synth_0144,English Language,Comprehension Skills,1,2,2,2,1,2,3,1,2,2,2
+synth_0145,Mathematics,Percentages,1,3,4,4,4,2,2,4,3,3,4
+synth_0146,Mathematics,Area of Plane Shapes,1,2,1,2,1,2,1,1,1,1,1
+synth_0147,Mathematics,Fractions,1,1,1,2,2,1,2,1,1,1,1
+synth_0148,Integrated Science,The Water Cycle,1,4,3,4,4,4,4,3,3,3,4
+synth_0149,Mathematics,Fractions,1,2,1,2,1,1,2,1,1,1,1
+synth_0150,Integrated Science,Photosynthesis,1,1,1,2,1,1,1,2,2,1,1
+synth_0151,Integrated Science,The Water Cycle,1,2,2,1,2,2,1,2,2,2,3
+synth_0152,Integrated Science,Photosynthesis,1,3,3,4,4,4,4,4,4,4,4
+synth_0153,Integrated Science,The Water Cycle,1,2,1,2,2,2,1,1,1,1,1
+synth_0154,English Language,Nouns and Pronouns,1,3,2,1,2,1,3,1,3,1,2
+synth_0155,Mathematics,Percentages,1,3,2,2,2,2,2,2,1,1,2
+synth_0156,Integrated Science,Photosynthesis,1,3,2,4,3,3,3,3,2,2,3
+synth_0157,English Language,Comprehension Skills,1,3,3,2,4,3,3,3,4,3,3
+synth_0158,Mathematics,Percentages,1,2,4,2,4,3,3,3,2,4,2
+synth_0159,Integrated Science,States of Matter,1,4,3,3,3,2,4,2,3,3,2
+synth_0160,Integrated Science,Photosynthesis,1,4,2,3,3,2,2,3,4,3,4
+synth_0161,Integrated Science,The Water Cycle,1,3,3,3,3,3,4,3,3,4,3
+synth_0162,Integrated Science,The Water Cycle,1,4,3,4,2,3,3,4,3,4,3
+synth_0163,English Language,Nouns and Pronouns,1,1,2,2,3,1,2,2,2,1,3
+synth_0164,Integrated Science,States of Matter,1,1,1,1,1,2,1,1,1,1,1
+synth_0165,Integrated Science,Simple Machines,1,2,3,4,4,4,2,4,4,3,3
+synth_0166,English Language,Nouns and Pronouns,1,4,4,4,4,3,3,4,4,4,4
+synth_0167,Mathematics,Fractions,1,4,3,3,4,3,3,2,3,3,2
+synth_0168,Mathematics,Percentages,1,1,2,2,2,1,2,3,2,2,2
+synth_0169,Integrated Science,States of Matter,1,3,3,4,3,3,4,2,2,2,3
+synth_0170,English Language,Comprehension Skills,1,4,4,3,3,4,4,3,4,3,4
+synth_0171,English Language,Comprehension Skills,1,2,2,3,3,2,2,2,2,2,3
+synth_0172,Mathematics,Fractions,1,4,3,4,4,4,3,4,4,4,3
+synth_0173,Integrated Science,States of Matter,1,2,2,1,2,2,1,1,1,3,3
+synth_0174,Integrated Science,Simple Machines,1,2,1,1,2,1,1,1,1,1,1
+synth_0175,Integrated Science,States of Matter,1,2,3,4,2,4,3,4,3,2,2
+synth_0176,English Language,Comprehension Skills,1,2,1,1,3,3,2,1,2,1,3
+synth_0177,Mathematics,Fractions,1,2,1,3,1,2,3,3,3,2,1
+synth_0178,Mathematics,Percentages,1,2,3,4,4,3,3,3,2,3,2
+synth_0179,Mathematics,Fractions,1,4,4,3,4,3,2,4,2,3,2
+synth_0180,English Language,Comprehension Skills,1,2,1,2,1,1,1,1,1,1,2
+synth_0181,Mathematics,Percentages,1,2,1,1,1,1,1,1,1,2,1
+synth_0182,Mathematics,Area of Plane Shapes,1,3,4,2,4,3,3,2,4,3,3
+synth_0183,Mathematics,Fractions,1,3,2,2,3,1,2,3,2,3,3
+synth_0184,Mathematics,Percentages,1,4,4,3,4,4,4,3,4,3,4
+synth_0185,Mathematics,Percentages,1,3,3,4,4,4,4,4,4,4,4
+synth_0186,English Language,Nouns and Pronouns,1,1,1,1,1,1,1,2,1,1,2
+synth_0187,Integrated Science,Simple Machines,1,4,4,4,4,4,4,4,4,4,4
+synth_0188,English Language,Comprehension Skills,1,2,3,3,3,3,3,3,3,3,3
+synth_0189,English Language,Comprehension Skills,1,4,4,4,4,4,4,3,4,4,4
+synth_0190,Mathematics,Area of Plane Shapes,1,1,3,2,2,2,2,1,2,2,2
+synth_0191,Integrated Science,The Water Cycle,1,2,4,2,2,4,3,2,4,3,4
+synth_0192,Integrated Science,The Water Cycle,1,2,2,1,3,2,2,2,1,1,3
+synth_0193,English Language,Nouns and Pronouns,1,4,4,4,4,4,3,3,4,4,3
+synth_0194,English Language,Comprehension Skills,1,2,1,3,2,2,1,1,2,2,3
+synth_0195,English Language,Nouns and Pronouns,1,2,2,3,1,2,2,2,2,1,2
+synth_0196,Integrated Science,Photosynthesis,1,3,3,3,3,4,4,4,3,4,4
+synth_0197,Mathematics,Area of Plane Shapes,1,2,2,3,2,2,4,3,3,3,3
+synth_0198,English Language,Nouns and Pronouns,1,2,1,1,1,1,3,2,1,1,1
+synth_0199,English Language,Nouns and Pronouns,1,1,1,1,1,1,2,1,1,1,1

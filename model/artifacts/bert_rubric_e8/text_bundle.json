@@ -1,0 +1,132 @@
+{
+  "contract_version": "2.0.0",
+  "base_model": "distilbert-base-uncased",
+  "criterion_keys": [
+    "learning_outcomes",
+    "pedagogical_content_knowledge",
+    "teaching_learning_strategies",
+    "resources_including_ict",
+    "assessment_strategies_in_plan",
+    "lesson_introduction_rpk",
+    "lesson_sequencing",
+    "attention_to_all_learners",
+    "concept_explanation_examples",
+    "lesson_closure"
+  ],
+  "score_range": [
+    1,
+    4
+  ],
+  "max_length": 512,
+  "lora": {
+    "r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "target_modules": [
+      "q_lin",
+      "v_lin"
+    ],
+    "modules_to_save": [
+      "pre_classifier",
+      "classifier",
+      "classifier",
+      "score"
+    ],
+    "bias": "none"
+  },
+  "training": {
+    "history": [
+      {
+        "epoch": 1,
+        "train_mse": 5.1209647903194675,
+        "val_mse": 3.374340700066608
+      },
+      {
+        "epoch": 2,
+        "train_mse": 1.49818847396157,
+        "val_mse": 1.2616950118023416
+      },
+      {
+        "epoch": 3,
+        "train_mse": 0.8820222407192378,
+        "val_mse": 0.7828783133755559
+      },
+      {
+        "epoch": 4,
+        "train_mse": 0.6642851287668402,
+        "val_mse": 0.6554596864658854
+      },
+      {
+        "epoch": 5,
+        "train_mse": 0.5526048997779945,
+        "val_mse": 0.5737073810204215
+      },
+      {
+        "epoch": 6,
+        "train_mse": 0.5004037347706881,
+        "val_mse": 0.6036499466585077
+      },
+      {
+        "epoch": 7,
+        "train_mse": 0.4594100086719959,
+        "val_mse": 0.5924145333144976
+      },
+      {
+        "epoch": 8,
+        "train_mse": 0.4603374143699547,
+        "val_mse": 0.5453247518643088
+      }
+    ],
+    "best_val_mse": 0.5453247518643088,
+    "n_train": 154,
+    "n_val": 46,
+    "val_indices": [
+      4,
+      5,
+      6,
+      10,
+      14,
+      15,
+      21,
+      26,
+      29,
+      31,
+      32,
+      37,
+      40,
+      42,
+      49,
+      56,
+      57,
+      58,
+      66,
+      68,
+      71,
+      72,
+      77,
+      79,
+      83,
+      90,
+      98,
+      99,
+      100,
+      109,
+      111,
+      117,
+      123,
+      128,
+      132,
+      145,
+      148,
+      152,
+      164,
+      167,
+      168,
+      171,
+      175,
+      179,
+      181,
+      190
+    ]
+  }
+}

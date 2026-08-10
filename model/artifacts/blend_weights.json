@@ -1,0 +1,77 @@
+{
+  "contract_version": "2.0.0",
+  "n_holdout": 46,
+  "note": "Fitted on synthetic plans. Refit against the real annotated CoE plans before relying on these weights.",
+  "per_criterion": {
+    "learning_outcomes": {
+      "structural_weight": 0.92,
+      "text_weight": 0.08,
+      "blended_rmse": 0.3833,
+      "structural_only_rmse": 0.3856,
+      "text_only_rmse": 0.5989
+    },
+    "pedagogical_content_knowledge": {
+      "structural_weight": 0.69,
+      "text_weight": 0.31,
+      "blended_rmse": 0.4649,
+      "structural_only_rmse": 0.4911,
+      "text_only_rmse": 0.5848
+    },
+    "teaching_learning_strategies": {
+      "structural_weight": 0.59,
+      "text_weight": 0.41,
+      "blended_rmse": 0.6855,
+      "structural_only_rmse": 0.7129,
+      "text_only_rmse": 0.7418
+    },
+    "resources_including_ict": {
+      "structural_weight": 0.15,
+      "text_weight": 0.85,
+      "blended_rmse": 0.6044,
+      "structural_only_rmse": 0.6756,
+      "text_only_rmse": 0.6067
+    },
+    "assessment_strategies_in_plan": {
+      "structural_weight": 0.61,
+      "text_weight": 0.39,
+      "blended_rmse": 0.4601,
+      "structural_only_rmse": 0.5182,
+      "text_only_rmse": 0.5876
+    },
+    "lesson_introduction_rpk": {
+      "structural_weight": 0.48,
+      "text_weight": 0.52,
+      "blended_rmse": 0.6002,
+      "structural_only_rmse": 0.6521,
+      "text_only_rmse": 0.6451
+    },
+    "lesson_sequencing": {
+      "structural_weight": 0.81,
+      "text_weight": 0.19,
+      "blended_rmse": 0.4963,
+      "structural_only_rmse": 0.5025,
+      "text_only_rmse": 0.6014
+    },
+    "attention_to_all_learners": {
+      "structural_weight": 0.6,
+      "text_weight": 0.4,
+      "blended_rmse": 0.66,
+      "structural_only_rmse": 0.6767,
+      "text_only_rmse": 0.696
+    },
+    "concept_explanation_examples": {
+      "structural_weight": 0.53,
+      "text_weight": 0.47,
+      "blended_rmse": 0.3947,
+      "structural_only_rmse": 0.4356,
+      "text_only_rmse": 0.4444
+    },
+    "lesson_closure": {
+      "structural_weight": 0.8,
+      "text_weight": 0.2,
+      "blended_rmse": 0.4698,
+      "structural_only_rmse": 0.4844,
+      "text_only_rmse": 0.664
+    }
+  }
+}

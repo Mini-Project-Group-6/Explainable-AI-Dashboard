@@ -2,4 +2,12 @@
 __pycache__/
 *.pyc
 venv/
+.venv/
 tmp_switch_page_source.txt
+
+.claude
+
+# Local submission store. Root-anchored so model/data/ is untouched.
+/data/
+*.db-journal
+*.db-wal

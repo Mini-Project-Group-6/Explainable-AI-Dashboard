@@ -1,0 +1,81 @@
+plan_id,subject,topic,is_synthetic,learning_outcomes,pedagogical_content_knowledge,teaching_learning_strategies,resources_including_ict,assessment_strategies_in_plan,lesson_introduction_rpk,lesson_sequencing,attention_to_all_learners,concept_explanation_examples,lesson_closure
+rev_0000_v1,Mathematics,Fractions,1,3,4,2,3,4,3,2,3,2,2
+rev_0000_v2,Mathematics,Fractions,1,4,4,2,4,4,3,2,3,2,3
+rev_0001_v1,Integrated Science,States of Matter,1,3,2,3,1,2,2,3,2,2,1
+rev_0001_v2,Integrated Science,States of Matter,1,3,2,3,2,2,3,3,3,2,1
+rev_0002_v1,Integrated Science,The Water Cycle,1,3,2,2,2,3,2,1,2,3,2
+rev_0002_v2,Integrated Science,The Water Cycle,1,4,2,2,2,4,2,1,2,3,3
+rev_0003_v1,Mathematics,Area of Plane Shapes,1,2,3,3,3,3,1,2,1,2,2
+rev_0003_v2,Mathematics,Area of Plane Shapes,1,2,3,4,3,4,1,2,1,3,2
+rev_0004_v1,Mathematics,Percentages,1,2,2,1,1,2,1,2,2,2,3
+rev_0004_v2,Mathematics,Percentages,1,3,3,1,1,2,1,4,2,2,3
+rev_0005_v1,Mathematics,Fractions,1,1,3,1,1,3,3,3,3,2,2
+rev_0005_v2,Mathematics,Fractions,1,3,3,3,1,3,3,3,3,2,3
+rev_0006_v1,Mathematics,Percentages,1,2,1,2,2,2,2,1,2,3,1
+rev_0006_v2,Mathematics,Percentages,1,2,1,4,2,2,2,1,3,3,2
+rev_0007_v1,English Language,Comprehension Skills,1,3,3,4,3,3,2,3,2,3,2
+rev_0007_v2,English Language,Comprehension Skills,1,3,3,4,3,4,2,4,2,3,3
+rev_0008_v1,Integrated Science,The Water Cycle,1,1,1,1,1,1,1,1,1,2,2
+rev_0008_v2,Integrated Science,The Water Cycle,1,1,1,1,2,1,1,1,2,4,2
+rev_0009_v1,Integrated Science,Simple Machines,1,2,2,3,4,2,2,3,3,4,3
+rev_0009_v2,Integrated Science,Simple Machines,1,2,4,3,4,2,2,4,4,4,3
+rev_0010_v1,Mathematics,Area of Plane Shapes,1,1,1,2,2,2,1,1,1,1,2
+rev_0010_v2,Mathematics,Area of Plane Shapes,1,2,2,2,2,2,1,1,2,1,2
+rev_0011_v1,Integrated Science,Photosynthesis,1,1,1,1,2,2,1,1,1,1,2
+rev_0011_v2,Integrated Science,Photosynthesis,1,1,1,1,3,2,2,1,2,1,2
+rev_0012_v1,English Language,Nouns and Pronouns,1,1,1,1,1,2,1,1,1,1,1
+rev_0012_v2,English Language,Nouns and Pronouns,1,3,1,1,1,2,2,1,2,1,1
+rev_0013_v1,Mathematics,Fractions,1,3,3,4,3,3,3,4,3,2,3
+rev_0013_v2,Mathematics,Fractions,1,3,3,4,4,4,4,4,3,2,3
+rev_0014_v1,Integrated Science,The Water Cycle,1,2,2,3,2,1,3,2,1,3,2
+rev_0014_v2,Integrated Science,The Water Cycle,1,2,2,4,2,1,3,2,2,3,3
+rev_0015_v1,English Language,Comprehension Skills,1,4,4,3,3,2,4,3,3,3,2
+rev_0015_v2,English Language,Comprehension Skills,1,4,4,3,4,2,4,4,3,4,2
+rev_0016_v1,Integrated Science,Simple Machines,1,1,1,2,1,1,2,1,1,1,1
+rev_0016_v2,Integrated Science,Simple Machines,1,3,1,2,2,1,2,1,2,1,1
+rev_0017_v1,Mathematics,Percentages,1,3,3,3,1,2,1,2,2,2,2
+rev_0017_v2,Mathematics,Percentages,1,3,3,3,1,2,1,3,2,4,3
+rev_0018_v1,Mathematics,Percentages,1,3,3,4,3,3,2,4,3,3,4
+rev_0018_v2,Mathematics,Percentages,1,3,4,4,3,4,2,4,3,4,4
+rev_0019_v1,Integrated Science,Photosynthesis,1,1,1,3,2,2,2,2,2,2,2
+rev_0019_v2,Integrated Science,Photosynthesis,1,1,1,4,3,3,2,2,2,2,2
+rev_0020_v1,English Language,Comprehension Skills,1,4,2,4,3,3,3,2,3,3,4
+rev_0020_v2,English Language,Comprehension Skills,1,4,2,4,3,4,3,2,4,4,4
+rev_0021_v1,Integrated Science,The Water Cycle,1,1,1,1,1,1,2,1,2,1,2
+rev_0021_v2,Integrated Science,The Water Cycle,1,1,3,1,1,1,2,1,4,2,2
+rev_0022_v1,Mathematics,Fractions,1,3,2,4,3,2,3,2,4,2,3
+rev_0022_v2,Mathematics,Fractions,1,3,2,4,4,3,3,2,4,3,3
+rev_0023_v1,Mathematics,Percentages,1,1,1,1,1,1,1,2,1,1,1
+rev_0023_v2,Mathematics,Percentages,1,2,1,3,2,1,1,2,1,1,1
+rev_0024_v1,English Language,Comprehension Skills,1,3,2,2,2,3,2,2,1,3,2
+rev_0024_v2,English Language,Comprehension Skills,1,3,2,2,2,3,2,4,3,3,4
+rev_0025_v1,Mathematics,Percentages,1,2,3,2,2,1,1,3,2,2,2
+rev_0025_v2,Mathematics,Percentages,1,2,3,2,3,2,1,3,3,2,2
+rev_0026_v1,Integrated Science,States of Matter,1,3,4,2,3,3,3,4,2,3,3
+rev_0026_v2,Integrated Science,States of Matter,1,3,4,3,4,4,3,4,2,3,3
+rev_0027_v1,Mathematics,Fractions,1,2,3,2,1,3,1,1,1,3,1
+rev_0027_v2,Mathematics,Fractions,1,2,3,2,1,3,3,1,2,3,2
+rev_0028_v1,English Language,Comprehension Skills,1,2,1,1,1,1,2,2,2,2,1
+rev_0028_v2,English Language,Comprehension Skills,1,2,1,1,2,1,4,2,4,2,1
+rev_0029_v1,Integrated Science,Simple Machines,1,1,1,1,1,1,1,1,1,1,1
+rev_0029_v2,Integrated Science,Simple Machines,1,1,1,1,1,2,1,3,1,3,1
+rev_0030_v1,Mathematics,Fractions,1,3,1,1,2,2,2,2,2,3,1
+rev_0030_v2,Mathematics,Fractions,1,3,1,3,2,4,2,2,2,3,2
+rev_0031_v1,English Language,Comprehension Skills,1,3,4,3,3,3,3,4,3,4,2
+rev_0031_v2,English Language,Comprehension Skills,1,4,4,3,4,3,3,4,3,4,3
+rev_0032_v1,Mathematics,Percentages,1,3,4,3,2,2,2,3,3,3,4
+rev_0032_v2,Mathematics,Percentages,1,3,4,3,2,3,3,3,3,4,4
+rev_0033_v1,English Language,Nouns and Pronouns,1,2,1,2,2,2,1,1,2,2,1
+rev_0033_v2,English Language,Nouns and Pronouns,1,3,1,2,2,2,1,1,2,3,2
+rev_0034_v1,English Language,Nouns and Pronouns,1,1,2,1,2,1,1,1,1,2,1
+rev_0034_v2,English Language,Nouns and Pronouns,1,1,2,1,2,1,3,3,1,4,1
+rev_0035_v1,English Language,Nouns and Pronouns,1,2,1,3,1,3,2,2,1,1,2
+rev_0035_v2,English Language,Nouns and Pronouns,1,2,1,3,1,4,2,2,1,3,3
+rev_0036_v1,Mathematics,Percentages,1,2,2,1,1,1,1,2,1,1,1
+rev_0036_v2,Mathematics,Percentages,1,2,2,1,1,2,1,2,3,1,2
+rev_0037_v1,Integrated Science,Simple Machines,1,2,2,3,3,1,2,2,2,2,3
+rev_0037_v2,Integrated Science,Simple Machines,1,2,2,4,3,1,2,4,2,3,3
+rev_0038_v1,Mathematics,Percentages,1,3,3,3,3,4,3,4,2,4,2
+rev_0038_v2,Mathematics,Percentages,1,4,3,4,3,4,3,4,2,4,3
+rev_0039_v1,English Language,Comprehension Skills,1,2,1,1,2,1,1,2,1,2,1
+rev_0039_v2,English Language,Comprehension Skills,1,2,1,1,2,1,3,2,3,3,1
