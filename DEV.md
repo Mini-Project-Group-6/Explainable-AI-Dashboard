@@ -300,7 +300,7 @@ Held-out QWK is written to `artifacts/bert_rubric/holdout_report.json` and loade
 | 21 | Train XGBoost/BERT to score plans against the rubric | Done: `scoring/`; artifacts trained and loading under contract 2.0.0 (synthetic data only) |
 | 22 | SHAP feature-importance for *every* feedback item | `suggestions.py` — each item carries its Shapley value, influence share and `attribution_text`; non-SHAP rules declare themselves |
 | 23 | Streamlit dashboard: scores, SHAP waterfall, suggestions | S2 components in `render.py` (`st_waterfall`, `st_force_plot`, `st_beeswarm`, `st_suggestions_panel`, `st_transparency_panel`); the dashboard shell itself is S3 |
-| 24 | Measure trust + plan quality before/after | S4 built: instruments, consent and pre/post collection in `app/study/`, export via `python -m app.study export`. **Materials are draft until ethics approval** (`docs/irb/README.md`). Synthetic before/after pairs: `data/synthetic.py --revisions N`. Analysis is S5 |
+| 24 | Measure trust + plan quality before/after | S4 built: instruments, consent and pre/post collection in `app/study/`, export via `python -m app.study export`. **Materials are draft until ethics approval** (`docs/irb/README.md`). Synthetic before/after pairs: `data/synthetic.py --revisions N`. S5 analysis: `python -m analysis` |
 
 Method & Tools calls for waterfall, **force plot** and summary visualisations — all four
 forms are in `explainability/shap_tree.py` (`save_waterfall`, `save_force_plot` /
@@ -444,6 +444,36 @@ placeholders in the participant documents, and item wording that has not been
 checked against the papers (the `source_text` was transcribed, not copied).
 `docs/irb/README.md` lists the claims the colleges must confirm before
 submission.
+
+### S5 — analysis (`analysis/`)
+
+`python -m analysis run --export data/export` reads the S4 export and writes
+`summary.md`, CSV tables and figures to `data/analysis/` (gitignored).
+`python -m analysis synthetic` does the same on a generated export with known
+effects, and every report built from one is stamped SYNTHETIC.
+
+The analysis plan was fixed before any data existed:
+
+| | Question | Test |
+|---|---|---|
+| RQ1 | Do PU, PEOU, BI and TR change between the surveys? | Paired t on scale means, Holm across the four; Wilcoxon as the robustness check; effect sizes d_z and rank-biserial r. **TR is primary** |
+| RQ2 | Do plans improve across drafts? | First vs last scored plan per participant: overall score, and each criterion with Holm across ten |
+| RQ3 | Does trust change go with quality change? | Spearman, each scale's change vs the change in overall score, Holm across four |
+| — | Descriptives | Cronbach's α per scale and survey, ES (post only), background counts |
+
+- **Screening.**
+  - Pilot data is excluded unless `--include-pilot`.
+  - Mixed or mismatched instrument versions are refused.
+  - A first survey answered after AI feedback is excluded from RQ1 and RQ3
+    unless `--include-late-baseline`.
+  - The sample-flow table counts every step.
+- **One source of truth.** Scale membership and reverse keying come from
+  `app/study/instruments.py`. Scale means are recomputed from the items, and
+  any disagreement with the export's own means is reported.
+- **Verification.** `tests/test_analysis.py` checks the statistics against hand
+  calculations, recovers the synthetic export's built-in effects (trust rises
+  most, and only trust change tracks quality change), and runs one full path
+  from the app's tables through the export into a report.
 
 ### Pending verification
 

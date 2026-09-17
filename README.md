@@ -137,6 +137,21 @@ The dashboard tests use a throwaway SQLite file, so they never touch your
 database. To run them against PostgreSQL instead, set
 `COTEACH_TEST_DATABASE_URL` to a database whose name ends in `_test`.
 
+## Analysis (S5)
+
+```powershell
+.venv\Scripts\python -m app.study export --out data/export
+.venv\Scripts\python -m analysis run --export data/export
+```
+
+This writes `data/analysis/summary.md`, with reliability, before-and-after
+tests, plan-quality change, and the link between trust and quality, plus CSV
+tables and figures. Until the study has ethics approval, every response is
+pilot data, so add `--include-pilot` to both commands. To see a complete report
+before any real data exists, run
+`.venv\Scripts\python -m analysis synthetic`. Its output is clearly marked
+synthetic.
+
 ## Layout
 
 | Path | Contents | Owner |
@@ -144,10 +159,12 @@ database. To run them against PostgreSQL instead, set
 | `model/` | Feature extraction, XGBoost and DistilBERT scoring, SHAP explanations and their UI components | S1, S2 |
 | `main.py`, `pages/`, `app/` | Sign-in, dashboard, storage, accounts, database tools | S3 |
 | `app/study/`, `docs/irb/` | Survey instruments, consent, data collection, ethics drafts | S4 |
-| `tests/` | Dashboard, storage, account and study tests | S3, S4 |
+| `analysis/` | Statistical analysis of the study export | S5 |
+| `tests/` | Dashboard, storage, account, study and analysis tests | S3, S4, S5 |
 | `DEV.md` | Design notes, measured results and conventions | all |
 
 ## Tech stack
 
 Python 3.12 · Streamlit · PostgreSQL (SQLAlchemy) · XGBoost · DistilBERT with
-LoRA (PyTorch, Transformers, PEFT) · SHAP · spaCy
+LoRA (PyTorch, Transformers, PEFT) · SHAP · spaCy · SciPy and pandas for the
+analysis

@@ -13,20 +13,16 @@ venv/
 .DS_Store
 Thumbs.db
 
+# Claude Code settings: machine-specific paths.
 .claude
+
+# Secrets. .env holds the database login; .env.example is the committed
+# template, and `python -m app.database setup` writes a real one per machine.
 .env
-__pycache__/
-*.pyc
-venv/
-.venv/
-tmp_switch_page_source.txt
+.streamlit/secrets.toml
 
-.claude
-
-# Local submission store. Root-anchored so model/data/ is untouched.
+# Local data: backups, study exports and analysis reports. Root-anchored so
+# model/data/ is untouched. Participant data never goes into git.
 /data/
 *.db-journal
 *.db-wal
-
-# Streamlit secrets. config.toml is committed; secrets never are.
-.streamlit/secrets.toml

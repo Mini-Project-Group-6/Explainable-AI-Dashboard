@@ -6,7 +6,8 @@
 # numpy past 2.0 and broke xgboost 1.7.6 — model/requirements.txt holds numpy
 # below 2.0 deliberately, because xgboost 1.7.6 predates the numpy 2 ABI.
 #
-# So numpy, pandas and click are NOT pinned here. They are shared with the
+# So numpy, pandas, scipy and click are NOT pinned here (scipy, which the S5
+# analysis uses, arrives with scikit-learn). They are shared with the
 # model layer and model/requirements.txt is where their versions are decided.
 # Streamlit and Altair work fine against those older pins; the two stacks were
 # installed side by side and verified.
