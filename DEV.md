@@ -90,7 +90,9 @@ The wording blames the tool, not the student teacher. See `tests/test_format_gua
 
 ### Regenerating artifacts
 
-`model/artifacts/` and `model/data/` are gitignored and regenerable:
+`model/artifacts/` and `model/data/` are committed (about 20 MB), so a fresh
+clone scores plans without retraining. They are also regenerable. After a
+retrain, commit every artifact together:
 
 ```
 cd model
