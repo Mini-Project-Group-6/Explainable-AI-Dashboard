@@ -1,0 +1,55 @@
+# S1 ML pipeline dependencies
+#
+# These are the versions this pipeline was actually built and validated against,
+# on CPython 3.12 / Windows, CPU-only, offline at inference time.
+#
+# Deviation from proposal Part D5, recorded deliberately: D5 pins Python 3.11.9
+# with shap==0.44.0 and spacy==3.7.4. shap 0.44.0 has no cp312 wheel and fails to
+# build from source, so it moves to 0.49.x; spacy follows to 3.8.x for the same
+# reason. Everything else installs at its pinned version on 3.12, including
+# xgboost 1.7.6. If the methods section quotes versions, quote these.
+#
+# Setup:
+#   py -3.12 -m venv .venv
+#   .venv\Scripts\python -m pip install -r model/requirements.txt
+#   .venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   .venv\Scripts\python -m spacy download en_core_web_sm
+
+# Core ML
+numpy==1.26.4          # held below 2.0 — xgboost 1.7.6 predates the numpy 2 ABI
+pandas==2.2.2
+scikit-learn==1.4.2
+xgboost==1.7.6
+shap==0.49.1           # was 0.44.0; no cp312 wheel
+matplotlib==3.8.4
+
+# NLP / ingestion
+spacy==3.8.14          # was 3.7.4; follows shap to a cp312-supported release
+click==8.4.2           # spaCy's CLI needs it; typer 0.27 no longer pulls it in
+pymupdf==1.28.0
+python-docx==1.2.0
+
+# BERT + LoRA (CPU-only)
+#
+# torch is deliberately NOT pinned here. The validated build is 2.13.0+cpu, but
+# "+cpu" is a local-version identifier published only on download.pytorch.org,
+# so pinning it in this file makes `pip install -r requirements.txt` fail to
+# resolve and install nothing at all — including the packages that would have
+# been fine. Install it separately, from the CPU index (the default Windows PyPI
+# wheel bundles CUDA and is ~2.4GB for a project that never uses a GPU):
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#
+# These are far ahead of D5's pins (torch 2.3.0, transformers 4.40.1, peft
+# 0.11.1) — transformers in particular is a major version up. Verified against
+# scoring/train_bert_lora.py before training: get_linear_schedule_with_warmup
+# still exists, problem_type="regression" still gives a 10-output head, and
+# DistilBERT's attention projections are still named q_lin/v_lin, which is what
+# LORA_CONFIG targets. If you upgrade transformers again, re-check those three.
+transformers==5.14.1
+peft==0.20.0
+accelerate==1.14.0
+
+# Utilities
+joblib==1.4.2
+tqdm==4.66.4

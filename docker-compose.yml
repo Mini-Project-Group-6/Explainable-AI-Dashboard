@@ -1,0 +1,44 @@
+# PostgreSQL in a container, for machines without a local PostgreSQL install.
+# With PostgreSQL installed natively, skip this file and run
+# `python -m app.database setup` instead.
+#
+#   docker compose up -d
+#   cp .env.example .env          # then set DB_PORT=5434 and
+#                                 # DB_PASSWORD=coteach_dev_only
+#   .venv\Scripts\python -m streamlit run main.py
+#
+# The schema is created on first connection by SQLAlchemy; there is no
+# migration step to run.
+
+services:
+  db:
+    # The same major version as the native install the project runs on.
+    image: postgres:18-alpine
+    container_name: coteach-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: coteach
+      POSTGRES_USER: coteach
+      # Local development only. A real deployment must not take its password
+      # from a file committed to the repository.
+      POSTGRES_PASSWORD: coteach_dev_only
+    ports:
+      # 5434 on the host. 5432 and 5433 are where the Windows installer puts
+      # native PostgreSQL servers (the dev machine's 18 is on 5433), and
+      # "port is already allocated" is a confusing first experience.
+      - "5434:5432"
+    volumes:
+      # From 18 the official image keeps its data under a versioned directory
+      # inside /var/lib/postgresql, and expects the volume there rather than
+      # at .../data as in 16 and earlier.
+      - coteach_pgdata:/var/lib/postgresql
+    healthcheck:
+      # The app connects on startup, so "container running" is not enough —
+      # wait until Postgres is actually accepting queries.
+      test: ["CMD-SHELL", "pg_isready -U coteach -d coteach"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  coteach_pgdata:

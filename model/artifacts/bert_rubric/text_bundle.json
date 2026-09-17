@@ -1,0 +1,148 @@
+{
+  "contract_version": "2.0.0",
+  "corpus_fingerprint": "963d4c9171fbfe70",
+  "base_model": "distilbert-base-uncased",
+  "criterion_keys": [
+    "learning_outcomes",
+    "pedagogical_content_knowledge",
+    "teaching_learning_strategies",
+    "resources_including_ict",
+    "assessment_strategies_in_plan",
+    "lesson_introduction_rpk",
+    "lesson_sequencing",
+    "attention_to_all_learners",
+    "concept_explanation_examples",
+    "lesson_closure"
+  ],
+  "score_range": [
+    1,
+    4
+  ],
+  "max_length": 512,
+  "lora": {
+    "r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.1,
+    "target_modules": [
+      "q_lin",
+      "v_lin"
+    ],
+    "modules_to_save": [
+      "pre_classifier",
+      "classifier",
+      "classifier",
+      "score"
+    ],
+    "bias": "none"
+  },
+  "training": {
+    "history": [
+      {
+        "epoch": 1,
+        "train_mse": 6.25059183232196,
+        "val_mse": 2.369792907134346
+      },
+      {
+        "epoch": 2,
+        "train_mse": 1.5060498358367325,
+        "val_mse": 1.0806031408517256
+      },
+      {
+        "epoch": 3,
+        "train_mse": 0.9854940717870538,
+        "val_mse": 0.630224743615026
+      },
+      {
+        "epoch": 4,
+        "train_mse": 0.5839409065711034,
+        "val_mse": 0.6214838079784227
+      },
+      {
+        "epoch": 5,
+        "train_mse": 0.5569797243390765,
+        "val_mse": 0.7139143399570299
+      },
+      {
+        "epoch": 6,
+        "train_mse": 0.5137575404210524,
+        "val_mse": 0.5217933810275533
+      },
+      {
+        "epoch": 7,
+        "train_mse": 0.4496503511032501,
+        "val_mse": 0.6093261863874353
+      },
+      {
+        "epoch": 8,
+        "train_mse": 0.47587226737629285,
+        "val_mse": 0.3864990071110103
+      },
+      {
+        "epoch": 9,
+        "train_mse": 0.45946952739319247,
+        "val_mse": 0.5413129433341648
+      },
+      {
+        "epoch": 10,
+        "train_mse": 0.41842230032016703,
+        "val_mse": 0.4177558162937994
+      },
+      {
+        "epoch": 11,
+        "train_mse": 0.3990032657400354,
+        "val_mse": 0.3868148456449094
+      }
+    ],
+    "best_val_mse": 0.3864990071110103,
+    "n_train": 154,
+    "n_val": 46,
+    "val_indices": [
+      4,
+      5,
+      6,
+      10,
+      14,
+      15,
+      21,
+      26,
+      29,
+      31,
+      32,
+      37,
+      40,
+      42,
+      49,
+      56,
+      57,
+      58,
+      66,
+      68,
+      71,
+      72,
+      77,
+      79,
+      83,
+      90,
+      98,
+      99,
+      100,
+      109,
+      111,
+      117,
+      123,
+      128,
+      132,
+      145,
+      148,
+      152,
+      164,
+      167,
+      168,
+      171,
+      175,
+      179,
+      181,
+      190
+    ]
+  }
+}

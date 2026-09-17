@@ -1,0 +1,21 @@
+# Streamlit settings for the dashboard. Applies to local runs too; override a
+# single option on the command line when developing, e.g.
+#   streamlit run main.py --client.showErrorDetails=full
+
+[browser]
+# On by default: every visitor's browser reports usage metrics to Streamlit.
+# The participant information sheet and data-management plan promise no such
+# third-party collection, so it stays off.
+gatherUsageStats = false
+
+[client]
+# Tracebacks name server paths, SQL and sometimes row values. Users get a
+# generic message; the full error still goes to the server log.
+showErrorDetails = "none"
+# No developer menu (rerun, clear cache, settings) for student teachers.
+toolbarMode = "viewer"
+
+[server]
+# Lesson plans are a few MB at most. The default 200 MB lets one upload hold
+# that much in memory per session on a shared lab machine.
+maxUploadSize = 25

@@ -1,5 +1,28 @@
-.env
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
 venv/
-tmp_switch_page_source.txt
+
+# Model artifacts and the synthetic corpus ARE committed (about 20 MB), so
+# the project scores plans straight from a fresh clone without retraining
+# DistilBERT. After retraining, commit the new artifacts together, so the
+# corpus fingerprints and blend weights stay consistent with each other.
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Claude Code settings: machine-specific paths.
+.claude
+
+# Secrets. .env holds the database login; .env.example is the committed
+# template, and `python -m app.database setup` writes a real one per machine.
+.env
+.streamlit/secrets.toml
+
+# Local data: backups, study exports and analysis reports. Root-anchored so
+# model/data/ is untouched. Participant data never goes into git.
+/data/
+*.db-journal
+*.db-wal

@@ -1,0 +1,50 @@
+{
+  "contract_version": "2.0.0",
+  "n_plans": 200,
+  "n_splits": 5,
+  "metric": "quadratic_weighted_kappa",
+  "note": "Cross-validated on synthetic plans. Re-run against the real annotated CoE plans before relying on these weights.",
+  "per_criterion": {
+    "learning_outcomes": {
+      "qwk": 0.8958,
+      "rmse": 0.4271
+    },
+    "pedagogical_content_knowledge": {
+      "qwk": 0.7899,
+      "rmse": 0.6441
+    },
+    "teaching_learning_strategies": {
+      "qwk": 0.6378,
+      "rmse": 0.8492
+    },
+    "resources_including_ict": {
+      "qwk": 0.6909,
+      "rmse": 0.7825
+    },
+    "assessment_strategies_in_plan": {
+      "qwk": 0.8541,
+      "rmse": 0.5694
+    },
+    "lesson_introduction_rpk": {
+      "qwk": 0.7217,
+      "rmse": 0.7254
+    },
+    "lesson_sequencing": {
+      "qwk": 0.826,
+      "rmse": 0.6213
+    },
+    "attention_to_all_learners": {
+      "qwk": 0.7381,
+      "rmse": 0.7373
+    },
+    "concept_explanation_examples": {
+      "qwk": 0.8479,
+      "rmse": 0.578
+    },
+    "lesson_closure": {
+      "qwk": 0.8306,
+      "rmse": 0.5677
+    }
+  },
+  "mean_qwk": 0.7833
+}
