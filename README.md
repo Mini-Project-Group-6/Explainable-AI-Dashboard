@@ -12,3 +12,4 @@ An AI powered co-teaching dashboard that clearly explains its actions to the use
 - AI quality scoring
 - SHAP explainability
 - Revision tracking
+- Trust and acceptance survey (pre/post, with consent and withdrawal); ethics materials in `docs/irb/`

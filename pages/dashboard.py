@@ -16,6 +16,10 @@ from DEV.md, handles the upload, and calls into ``explainability.render``:
     st_waterfall/st_force_plot   the SHAP plots, drawn by S2 from real values
     st_transparency_panel   what the model is and what it cannot see
 
+The trust survey tab and the one-time participation choice are S4's, drawn by
+``app.study.ui``; this page only asks ``app.study.store`` whether the upload is
+open yet.
+
 Where the model layer is not importable this page says so plainly instead of
 substituting placeholder scores. A dashboard that shows plausible invented
 numbers is the exact failure mode this project is measuring.
@@ -23,13 +27,15 @@ numbers is the exact failure mode this project is measuring.
 
 from __future__ import annotations
 
+import html
+
 import altair as alt
 import pandas as pd
 import streamlit as st
 
 from app import accounts, session
 from app.components.sidebar import dashboard_sidebar, muted
-from app.components.title import page_title
+from app.components.title import academic_year, page_title
 from app.database import db
 from app.model_bridge import artifacts_status, model_layer
 from app.scoring import (
@@ -40,6 +46,9 @@ from app.scoring import (
     shap_explanations,
     submission_id,
 )
+from app.study import flow as study_flow
+from app.study import store as study_store
+from app.study import ui as study_ui
 
 page_title(layout="wide")
 user = session.require_user()
@@ -82,7 +91,7 @@ with head_left:
     st.markdown(
         "<h1 style='margin-bottom:0;'>Explainable AI Co-Teaching Dashboard</h1>"
         "<p class='page-sub'>Teacher College Research Portal · "
-        "Academic Year 2025&ndash;2026</p>",
+        f"Academic Year {html.escape(academic_year())}</p>",
         unsafe_allow_html=True,
     )
 with head_right:
@@ -91,14 +100,14 @@ with head_right:
         <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end;">
             <div style="text-align:right;min-width:0;">
                 <div style="font-weight:700;overflow:hidden;
-                            text-overflow:ellipsis;">{user.name}</div>
+                            text-overflow:ellipsis;">{html.escape(user.name)}</div>
                 <div style="font-size:13px;color:{GREY};overflow:hidden;
-                            text-overflow:ellipsis;">{user.email}</div>
+                            text-overflow:ellipsis;">{html.escape(user.email)}</div>
             </div>
             <div style="flex:0 0 auto;background:{BRAND};color:#fff;width:44px;
                         height:44px;border-radius:50%;display:flex;
                         align-items:center;justify-content:center;
-                        font-weight:700;">{user.initials}</div>
+                        font-weight:700;">{html.escape(user.initials)}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -111,6 +120,12 @@ if not layer.available:
         f"{layer.error}\n\n{layer.hint}",
         icon=":material/error:",
     )
+
+# Asked once, above the tabs, before anything can be scored: a pre-survey taken
+# after seeing AI feedback is not a baseline. Declining unblocks immediately.
+study = study_store.current_state(user)
+if study.stage == study_flow.UNDECIDED:
+    study_ui.st_consent_card(user)
 
 scoring_tab, history_tab, survey_tab, transparency_tab = st.tabs(
     ["Scoring", "Revision history", "Trust survey", "Transparency"])
@@ -126,14 +141,16 @@ with scoring_tab:
             "Upload a lesson plan",
             type=ACCEPTED_TYPES,
             label_visibility="collapsed",
-            disabled=not layer.available,
+            disabled=not layer.available or study.upload_blocked,
             help="PDF or Word lesson plan. Plain text is accepted for testing.",
         )
+        study_ui.st_upload_notice(study)
         if layer.available and scorer_error():
             st.warning(scorer_error(), icon=":material/warning:")
 
     submission = None
-    if upload is not None and layer.available and scorer_error() is None:
+    if (upload is not None and layer.available and scorer_error() is None
+            and not study.upload_blocked):
         with st.spinner("Scoring the plan and building its explanation…"):
             try:
                 submission = score_upload(upload)
@@ -207,11 +224,11 @@ with scoring_tab:
                           for item in explainable}
                 chosen = st.selectbox("Criterion", list(labels),
                                       key="shap_criterion")
-                st.caption(
-                    "Values are in rubric score units (1–4), not points out of "
-                    "100. The plots decompose the plan-structure channel only — "
-                    "a feature contribution and a wording attribution come from "
-                    "different models and are never summed.")
+                # st.caption(
+                #     "Values are in rubric score units (1–4), not points out of "
+                #     "100. The plots decompose the plan-structure channel only — "
+                #     "a feature contribution and a wording attribution come from "
+                #     "different models and are never summed.")
 
                 item = labels[chosen]
                 per_criterion = shap_explanations(submission["features"])
@@ -238,7 +255,7 @@ with scoring_tab:
 # ----------------------------------------------------------------------------
 with history_tab:
     st.markdown("#### Revision history")
-    st.caption(db.status())
+    # st.caption(db.status())
 
     rows = db.submission_history(user.email)
     if not rows:
@@ -294,14 +311,9 @@ with history_tab:
 # Trust survey — S4's instruments
 # ----------------------------------------------------------------------------
 with survey_tab:
-    st.markdown("#### Trust and acceptance survey")
-    st.info(
-        "The TAM and trust-in-AI instruments are S4's deliverable and are not "
-        "wired in yet. This tab hosts them once the IRB-approved items are "
-        "final; the dashboard records the pre/post response against the "
-        "submission history above.",
-        icon=":material/assignment:",
-    )
+    # Re-read rather than reusing ``study``: a plan scored above in this same
+    # run may be the one that opens the follow-up survey.
+    study_ui.st_survey_tab(user)
 
 
 # ----------------------------------------------------------------------------
@@ -314,17 +326,24 @@ with transparency_tab:
         st.warning("The model layer is not loaded, so its coverage report is "
                    "unavailable.", icon=":material/warning:")
 
-    st.divider()
-    st.subheader("Deployment")
-    status = artifacts_status()
-    st.markdown(
-        f"- **Artifacts directory:** `{status['artifacts_dir']}`\n"
-        f"- **Structural model on disk:** "
-        f"{'yes' if status['rubric_model'] else 'no'}\n"
-        f"- **Text model on disk:** {'yes' if status['text_model'] else 'no'}\n"
-        f"- **Storage:** {db.status()}\n"
-        f"- **Access control:** password required · "
-        f"{accounts.count_accounts()} account(s) · scrypt hashed · "
-        f"{session.MAX_ATTEMPTS} attempts then a "
-        f"{session.LOCKOUT_SECONDS // 60}-minute lockout · "
-        f"{session.IDLE_TIMEOUT_SECONDS // 60}-minute idle timeout")
+    # Researchers only: server paths and account counts are operational
+    # detail, not something a student teacher needs to see.
+    if user.role == "researcher":
+        st.divider()
+        st.subheader("Deployment")
+        status = artifacts_status()
+        try:
+            account_count = str(accounts.count_accounts())
+        except Exception:                             # noqa: BLE001
+            account_count = "unknown"
+        st.markdown(
+            f"- **Artifacts directory:** `{status['artifacts_dir']}`\n"
+            f"- **Structural model on disk:** "
+            f"{'yes' if status['rubric_model'] else 'no'}\n"
+            f"- **Text model on disk:** {'yes' if status['text_model'] else 'no'}\n"
+            f"- **Storage:** {db.status()}\n"
+            f"- **Access control:** password required · "
+            f"{account_count} account(s) · scrypt hashed · "
+            f"{session.MAX_ATTEMPTS} attempts then a "
+            f"{session.LOCKOUT_SECONDS // 60}-minute lockout · "
+            f"{session.IDLE_TIMEOUT_SECONDS // 60}-minute idle timeout")

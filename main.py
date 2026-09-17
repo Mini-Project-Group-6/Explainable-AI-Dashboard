@@ -152,6 +152,13 @@ if st.session_state.pop("auth_expired", False):
 
 has_accounts = session.accounts_exist()
 
+if not has_accounts:
+    # Deliberately says nothing about how to fix it: this page is public, and
+    # the cause (no database, no accounts) is in the server log. Without it the
+    # page showed only a greyed-out button.
+    st.info("Sign-in isn't available at the moment. Please try again later, "
+            "or contact the research team.", icon=":material/lock:")
+
 with st.form("sign_in", border=False):
     email = st.text_input("Email address", placeholder="name@st.knust.edu.gh")
     password = st.text_input("Password", type="password",

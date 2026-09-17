@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import streamlit as st
+from sqlalchemy.exc import SQLAlchemyError
 
 from app import accounts
 
@@ -46,6 +47,9 @@ LOCKOUT_SECONDS = 15 * 60
 #: Idle time before a session is dropped. Short by default: these are shared
 #: machines in a computer lab, not personal laptops.
 IDLE_TIMEOUT_SECONDS = int(os.getenv("APP_IDLE_TIMEOUT", 60 * 60))
+
+UNAVAILABLE_MESSAGE = ("Sign-in is unavailable right now. Please try again in "
+                       "a few minutes.")
 
 #: address -> (consecutive failures, time of last failure). Process-wide on
 #: purpose; per-session state would reset with every new tab.
@@ -122,16 +126,28 @@ def sign_in(email: str, password: str) -> tuple[bool, str]:
     if not password:
         return False, "Enter your password."
 
-    if not accounts_exist():
-        return False, ("This deployment has no accounts yet, so sign-in is "
-                       "closed. An administrator must create one first.")
+    # An unreachable database is told apart from an empty one. Both used to
+    # read as "no accounts yet", which sends an administrator to create
+    # accounts that already exist.
+    if accounts.get_engine() is None:
+        return False, UNAVAILABLE_MESSAGE
+    try:
+        if accounts.count_accounts() == 0:
+            return False, ("This deployment has no accounts yet, so sign-in "
+                           "is closed. An administrator must create one first.")
+    except SQLAlchemyError:
+        return False, UNAVAILABLE_MESSAGE
 
     locked = _lockout_remaining(email)
     if locked:
         return False, (f"Too many failed attempts. Try again in "
                        f"{locked // 60 + 1} minute(s).")
 
-    account = accounts.verify_credentials(email, password)
+    try:
+        account = accounts.verify_credentials(email, password)
+    except SQLAlchemyError:
+        # Not the user's fault, so not counted towards their lockout.
+        return False, UNAVAILABLE_MESSAGE
     if account is None:
         _record_failure(email)
         # One message for both causes: revealing "no such account" would let
@@ -153,6 +169,10 @@ def sign_out() -> None:
     for key in ("submission", "session_history", "scored_submissions",
                 "recorded_submissions", "shap_criterion"):
         st.session_state.pop(key, None)
+    # Likewise a half-answered survey, which the next person at a shared lab
+    # machine would otherwise find filled in and could submit.
+    for key in [k for k in st.session_state if str(k).startswith("study_")]:
+        del st.session_state[key]
 
 
 def _touch() -> None:

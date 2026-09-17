@@ -22,22 +22,30 @@ locked, not open.
 same message *and* cost the same time — an unknown email is verified against a
 dummy hash rather than returning early, so response time does not reveal which
 addresses are registered.
+
+**Provisioning.** There is no self-registration. A cohort is created from its
+class list in one step (``import``), which writes the generated passwords to a
+sheet for distribution; a forgotten password is replaced with
+``passwd <email> --generate``.
 """
 
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
 import hmac
+import io
 import os
 import secrets
 import unicodedata
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import delete, func, insert, select, update
 
-from app.database.db import get_engine, users
+from app.database.db import REPO_ROOT, get_engine, users
 
 #: RFC 7914 interactive parameters. 16 MB of memory per verification.
 SCRYPT_N = 2 ** 14
@@ -48,6 +56,11 @@ KEY_BYTES = 32
 
 #: Rejected outright. Not a policy engine — just a floor that stops "1234".
 MIN_PASSWORD_LENGTH = 10
+
+ROLES = ("student_teacher", "tutor", "researcher")
+
+#: Columns an import file may have. Only ``email`` is required.
+IMPORT_COLUMNS = ("email", "name", "role")
 
 
 class AccountError(Exception):
@@ -153,6 +166,8 @@ def create_account(email: str, password: str, name: str = "",
     email = normalise_email(email)
     if "@" not in email:
         raise AccountError(f"{email!r} is not an email address.")
+    if role not in ROLES:
+        raise AccountError(f"Unknown role {role!r}; use one of {', '.join(ROLES)}.")
     if len(password) < MIN_PASSWORD_LENGTH:
         raise AccountError(
             f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
@@ -219,6 +234,145 @@ def verify_credentials(email: str, password: str) -> Optional[Account]:
     return Account(email=row["email"], name=row["name"], role=row["role"])
 
 
+def generate_password() -> str:
+    """16 URL-safe characters, about 96 bits. Easy to read out, hard to guess."""
+    return secrets.token_urlsafe(12)
+
+
+# ---------------------------------------------------------------------------
+# Bulk import
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ImportResult:
+    created: list[Account]
+    #: Addresses that already had an account. Left exactly as they were.
+    skipped: list[str]
+    #: Where the passwords went, or ``None`` if nothing was created.
+    sheet: Optional[Path]
+
+
+def _read_import(csv_path: Path, default_role: str) -> list[Account]:
+    """Parse and check a whole class list. Raises with *every* problem found."""
+    if default_role not in ROLES:
+        raise AccountError(f"Unknown role {default_role!r}; use one of "
+                           f"{', '.join(ROLES)}.")
+    try:
+        # utf-8-sig: Excel's "CSV UTF-8" starts with a byte-order mark.
+        text = Path(csv_path).read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        raise AccountError(f"No such file: {csv_path}") from None
+    except UnicodeDecodeError:
+        raise AccountError(f'{csv_path} is not UTF-8. In Excel, save it as '
+                           f'"CSV UTF-8".') from None
+
+    reader = csv.DictReader(io.StringIO(text))
+    headers = [(h or "").strip().lower() for h in reader.fieldnames or []]
+    reader.fieldnames = headers
+    if "email" not in headers:
+        raise AccountError(f"{csv_path} needs an 'email' column; found "
+                           f"{', '.join(headers) or 'no header row'}.")
+    # Strict on purpose: an unrecognised "full name" column would otherwise be
+    # dropped silently and every account named after its email address.
+    unknown = [h for h in headers if h not in IMPORT_COLUMNS]
+    if unknown:
+        raise AccountError(f"Unrecognised column(s): {', '.join(unknown)}. "
+                           f"Use only: {', '.join(IMPORT_COLUMNS)}.")
+
+    problems: list[str] = []
+    seen: dict[str, int] = {}
+    accounts: list[Account] = []
+    for line, record in enumerate(reader, start=2):
+        values = {key: (record.get(key) or "").strip() for key in headers}
+        if not any(values.values()):
+            continue
+        email = normalise_email(values["email"])
+        role = values.get("role", "").lower() or default_role
+        if "@" not in email or any(ch.isspace() for ch in email):
+            problems.append(f"line {line}: {values['email']!r} is not an email "
+                            f"address")
+        if role not in ROLES:
+            problems.append(f"line {line}: unknown role {role!r}")
+        if email in seen:
+            problems.append(f"line {line}: {email} is also on line {seen[email]}")
+        seen.setdefault(email, line)
+        accounts.append(Account(email=email,
+                                name=values.get("name") or default_name(email),
+                                role=role))
+
+    if problems:
+        raise AccountError("Nothing was imported. Fix these and run it again:\n  "
+                           + "\n  ".join(problems))
+    if not accounts:
+        raise AccountError(f"{csv_path} has no accounts in it.")
+    return accounts
+
+
+def _check_sheet_path(path: Path) -> None:
+    """Refuse a password sheet that could be overwritten or committed."""
+    resolved = Path(path).resolve()
+    if resolved.exists():
+        raise AccountError(f"{path} already exists. Choose a new file, so an "
+                           f"earlier password sheet is not overwritten.")
+    try:
+        inside = resolved.relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        return
+    if inside.parts[:1] != ("data",):
+        raise AccountError(
+            "That would put the password sheet inside the repository, where it "
+            "could be committed. Write it outside the repository, or under "
+            "data/ (which is gitignored).")
+
+
+def import_accounts(csv_path: Path, sheet_path: Path,
+                    default_role: str = "student_teacher") -> ImportResult:
+    """Create an account for every row of a class list, with generated passwords.
+
+    The file needs an ``email`` header; ``name`` and ``role`` columns are
+    optional. It is all or nothing: one bad row and no account is created, so
+    a class list is never left half-imported. Addresses that already have an
+    account are skipped untouched, so re-running an import never resets
+    anybody's password.
+
+    The passwords are written to *sheet_path* and nowhere else. The sheet is
+    written *before* the accounts are committed, so there is never an account
+    whose password nobody has, and it is removed again if the commit fails.
+    """
+    engine = _require_engine()
+    _check_sheet_path(sheet_path)
+    wanted = _read_import(csv_path, default_role)
+
+    with engine.connect() as connection:
+        existing = set(connection.execute(select(users.c.email)).scalars())
+    new = [account for account in wanted if account.email not in existing]
+    skipped = [account.email for account in wanted if account.email in existing]
+    if not new:
+        return ImportResult([], skipped, None)
+
+    issued = [(account, generate_password()) for account in new]
+    # Hashed before the transaction opens: ~190ms each, and a class of 200
+    # should not hold a write lock for 40 seconds.
+    rows = [dict(email=account.email, name=account.name, role=account.role,
+                 password_hash=hash_password(password))
+            for account, password in issued]
+
+    sheet = Path(sheet_path)
+    sheet.parent.mkdir(parents=True, exist_ok=True)
+    with sheet.open("x", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(("email", "name", "role", "password"))
+        for account, password in issued:
+            writer.writerow((account.email, account.name, account.role, password))
+    try:
+        with engine.begin() as connection:
+            connection.execute(insert(users), rows)
+    except Exception:
+        sheet.unlink(missing_ok=True)
+        raise
+    return ImportResult([account for account, _ in issued], skipped, sheet)
+
+
 def default_name(email: str) -> str:
     """"a.serwah@st.knust.edu.gh" -> "A Serwah", for seeding a display name."""
     local = email.split("@", 1)[0]
@@ -243,16 +397,29 @@ def _main() -> int:
     add = sub.add_parser("add", help="create an account")
     add.add_argument("email")
     add.add_argument("--name", default="")
-    add.add_argument("--role", default="student_teacher",
-                     choices=["student_teacher", "tutor", "researcher"])
+    add.add_argument("--role", default="student_teacher", choices=ROLES)
     add.add_argument("--password", default=None,
                      help="omit to be prompted, or use --generate")
     add.add_argument("--generate", action="store_true",
                      help="generate a random password and print it once")
 
+    bulk = sub.add_parser(
+        "import", help="create accounts from a CSV class list",
+        description="Columns: email (required), name, role. Every row is "
+                    "checked first; one bad row and nothing is created. "
+                    "Existing accounts are skipped, never reset.")
+    bulk.add_argument("csv", type=Path)
+    bulk.add_argument("--passwords", type=Path, required=True,
+                      help="new file for the generated passwords, outside "
+                           "the repository or under data/")
+    bulk.add_argument("--role", default="student_teacher", choices=ROLES,
+                      help="role for rows that leave the role column blank")
+
     sub.add_parser("list", help="list accounts")
 
-    pw = sub.add_parser("passwd", help="change a password")
+    pw = sub.add_parser("passwd",
+                        help="change a password, or reset a forgotten one "
+                             "with --generate")
     pw.add_argument("email")
     pw.add_argument("--password", default=None)
     pw.add_argument("--generate", action="store_true")
@@ -264,7 +431,7 @@ def _main() -> int:
 
     def resolve_password() -> str:
         if getattr(args, "generate", False):
-            generated = secrets.token_urlsafe(12)
+            generated = generate_password()
             print(f"Generated password: {generated}")
             print("Copy it now — it is not stored anywhere in readable form.")
             return generated
@@ -280,6 +447,18 @@ def _main() -> int:
             account = create_account(args.email, resolve_password(),
                                      args.name, args.role)
             print(f"Created {account.email} ({account.name}, {account.role}).")
+        elif args.command == "import":
+            print("Checking the file and hashing passwords (about 0.2s per "
+                  "account)...")
+            result = import_accounts(args.csv, args.passwords, args.role)
+            print(f"Created {len(result.created)} account(s).")
+            if result.skipped:
+                print(f"Skipped {len(result.skipped)} that already exist "
+                      f"(passwords unchanged): {', '.join(result.skipped)}")
+            if result.sheet:
+                print(f"Passwords written to {result.sheet}")
+                print("That file is the only copy. Hand the passwords out, "
+                      "then delete it.")
         elif args.command == "list":
             accounts = list_accounts()
             if not accounts:

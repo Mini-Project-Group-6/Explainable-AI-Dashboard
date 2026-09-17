@@ -28,3 +28,6 @@ tmp_switch_page_source.txt
 /data/
 *.db-journal
 *.db-wal
+
+# Streamlit secrets. config.toml is committed; secrets never are.
+.streamlit/secrets.toml

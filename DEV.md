@@ -18,7 +18,7 @@ pre/post design. Target journal: *Teaching and Teacher Education*.
 - **Text layer:** DistilBERT fine-tuned on rubric criteria
 - **Explanations:** SHAP (TreeExplainer for the tabular model)
 - **Dashboard:** Streamlit, four tabs — scoring, revision history, trust survey, transparency
-- **Storage:** SQLite by default; PostgreSQL via docker-compose
+- **Storage:** PostgreSQL (`python -m app.database setup` creates it). SQLite only for the test suite
 - **Testing:** Streamlit AppTest
 
 ## Rubric scope — important
@@ -295,10 +295,10 @@ Held-out QWK is written to `artifacts/bert_rubric/holdout_report.json` and loade
 
 | # | Objective | Status |
 |---|-----------|--------|
-| 21 | Train XGBoost/BERT to score plans against the rubric | Code complete (`scoring/`); **no artifacts trained yet** |
+| 21 | Train XGBoost/BERT to score plans against the rubric | Done: `scoring/`; artifacts trained and loading under contract 2.0.0 (synthetic data only) |
 | 22 | SHAP feature-importance for *every* feedback item | `suggestions.py` — each item carries its Shapley value, influence share and `attribution_text`; non-SHAP rules declare themselves |
 | 23 | Streamlit dashboard: scores, SHAP waterfall, suggestions | S2 components in `render.py` (`st_waterfall`, `st_force_plot`, `st_beeswarm`, `st_suggestions_panel`, `st_transparency_panel`); the dashboard shell itself is S3 |
-| 24 | Measure trust + plan quality before/after | Data side ready: `data/synthetic.py --revisions N` emits before/after pairs + `revisions.csv`. Instruments are S4, analysis S5 |
+| 24 | Measure trust + plan quality before/after | S4 built: instruments, consent and pre/post collection in `app/study/`, export via `python -m app.study export`. **Materials are draft until ethics approval** (`docs/irb/README.md`). Synthetic before/after pairs: `data/synthetic.py --revisions N`. Analysis is S5 |
 
 Method & Tools calls for waterfall, **force plot** and summary visualisations — all four
 forms are in `explainability/shap_tree.py` (`save_waterfall`, `save_force_plot` /
@@ -324,7 +324,7 @@ S2 is implemented:
    text-attribution highlighter, the suggestions panel and the transparency panel. S3 never
    needs to import `shap` or manage a matplotlib figure.
 
-Tests: `cd model && python -m unittest discover -s tests` — 96 tests, stdlib only. They run
+Tests: `cd model && python -m unittest discover -s tests` — 121 tests, stdlib only. They run
 on a bare checkout with no ML stack installed, which is the point: the contract's rules are
 checkable without loading the models.
 
@@ -347,6 +347,102 @@ If a criterion is ever added without a feature, the dashboard degrades honestly 
 presenting a decomposition that isn't evidence. `test_the_gap_machinery_still_works_if_a_gap_reappears`
 reintroduces a gap and asserts exactly that; don't delete it.
 
+### S3 — dashboard, storage, accounts
+
+- **PostgreSQL is required.** With no `DATABASE_URL` or `DB_HOST`+`DB_NAME`,
+  nothing is stored and sign-in stays closed; the server log says why. The old
+  silent fallback to `data/coteach.db` is gone: it let a machine without its
+  `.env` write study data outside the study database.
+  - `python -m app.database setup`: creates the `coteach` role and a database
+    it owns, and writes `.env`. It asks for the superuser's password once, or
+    reads `PGPASSWORD`. Without `--port`, it uses the newest *running* server
+    the Windows installer registered (`HKLM\SOFTWARE\PostgreSQL\Services`). On
+    the dev machine that is PostgreSQL 18 on **5433**, because the installer
+    avoided 17's 5432. The port goes into `.env`, so the app stays on that
+    server.
+  - `python -m app.database check`: connects and shows the server version and
+    row counts. If the connection fails, it names the local server that is
+    running.
+  - `python -m app.database copy-sqlite data/coteach.db`: brings old SQLite
+    data across. It never changes the source, and a second run copies nothing.
+- **Backups.** `python -m app.database backup` writes a custom-format
+  `pg_dump` to `data/backups/` (gitignored) and keeps the newest 14.
+  - The dump only counts once `pg_restore --list` has read it back and found
+    every table.
+  - `pg_dump` must be at least as new as the server, so it is taken from the
+    installer's own `bin` folders, newest first. `COTEACH_PG_BIN` overrides
+    that.
+  - `schedule-backup` registers the Windows task "CoTeach database backup":
+    daily at 18:00, runs as the signed-in user under `pythonw`, and catches up
+    after a missed day. Results go to `data/backups/backup.log`. It uses an
+    inline PowerShell command because the dev machine's execution policy is
+    AllSigned. The task is registered on the dev machine.
+  - To restore: `pg_restore --clean --if-exists --no-owner -d coteach <file>`.
+  - The dumps sit on the same disk as the database, so an off-machine copy is
+    still to be arranged (data-management plan section 8).
+- **Tests** run on a scratch SQLite file:
+  `.venv\Scripts\python -m unittest discover -s tests -t .`. To run the same
+  suite on PostgreSQL, set `COTEACH_TEST_DATABASE_URL` to a database whose name
+  ends in `_test`. Every app table in that database is dropped first. The
+  harness blanks the `DB_*` variables rather than deleting them: `db.py` calls
+  `load_dotenv()`, which refills absent variables, and deleting them once let a
+  developer's `.env` point the tests at their dev database.
+- **Accounts.** There is no self-registration.
+  `python -m app.accounts import class.csv --passwords <new file>` creates a
+  cohort all at once. Existing accounts are skipped and never reset. The
+  password sheet is refused inside the repository, except under `data/`. Reset
+  a forgotten password with `passwd <email> --generate`.
+- **Failure handling.** `get_engine()` only proves the database was up at
+  startup. Reads and writes after that catch `SQLAlchemyError`: saving and
+  history degrade to session memory, the study reads as unavailable, and
+  sign-in says "unavailable" without counting the attempt towards lockout.
+  Anything shown to people uses `db.display_url()`, which masks the password.
+- **`.streamlit/config.toml`** turns off browser usage statistics (the ethics
+  documents promise no third-party collection) and hides tracebacks and the
+  developer menu. It also caps uploads at 25 MB.
+- **Schema changes.** `create_all` creates missing tables but never alters
+  existing ones. Adding a column to a deployed table needs a migration.
+- **Deployment is not decided yet.** Only the database container exists. Still
+  needed: an app service, HTTPS (passwords currently cross the network
+  unencrypted), and backups.
+
+### S4 — trust study (`app/study/`, `docs/irb/`)
+
+**Instruments.** TAM — perceived usefulness and ease of use (Davis 1989),
+behavioural intention (Venkatesh & Davis 2000) — plus Hoffman et al. (2018)'s
+XAI trust scale, all on one 5-point agreement scale. Hoffman's explanation
+satisfaction scale is post-only. 22 items pre, 30 post; the 22 are identical in
+both waves. TR6 ("I am wary") is reverse-keyed. The adaptation table
+(`docs/irb/survey_instruments.md`) is generated from `instruments.py`, and a test
+fails if the two differ.
+
+**The gate** (`flow.py`, pure). A student teacher must accept or decline before
+their first upload. If they accept, the pre-survey must come before any plan is
+scored, so the baseline precedes AI feedback. The post-survey opens after
+`COTEACH_POST_AFTER_SUBMISSIONS` (default 2) plans scored *since* the
+pre-survey. Declining unblocks immediately and is never asked again. Tutors and
+researchers are never asked. Withdrawal deletes survey answers and is final in
+the app.
+
+**Approval is pinned to content.** `approval.fingerprint()` hashes the items,
+the two participant documents and the procedure (roles, post threshold).
+`is_approved()` needs `IRB_PROTOCOL` set, `APPROVED_FINGERPRINT` matching, no
+`{{PLACEHOLDERS}}` left and every source in `_VERIFIED_SOURCES`. Until then,
+responses are stored with `irb_protocol = NULL` (pilot), and the export drops
+them unless `--include-pilot` is given. Editing approved wording drops the
+study back to pilot on its own. That is intended.
+
+**Export** (`python -m app.study export --out data/export`, or the researcher
+view in the Trust survey tab): `participants.csv`, `responses.csv`,
+`submissions.csv`, keyed by random `P-XXXXXXXX` codes. Item columns are raw;
+`*_mean` columns are reverse-keyed. No statistics here — that is S5.
+
+**Status: draft.** `python -m app.study status` lists what is outstanding:
+placeholders in the participant documents, and item wording that has not been
+checked against the papers (the `source_text` was transcribed, not copied).
+`docs/irb/README.md` lists the claims the colleges must confirm before
+submission.
+
 ### Pending verification
 
 NTS indicator codes in `model_contract.CRITERIA` are matched by **descriptor wording**
@@ -355,6 +451,13 @@ the printed STS handbook. Add each confirmed code to `_VERIFIED_NTS_CODES`;
 `unverified_criteria()` reports the rest and the UI captions itself accordingly.
 
 ## Conventions
+
+- **Participant-facing wording lives in `docs/irb/`, never in code.** The app
+  reads the consent form and information sheet from there, so the committee
+  and the participants see the same text.
+- **Nothing identifying leaves the database.** Exports carry participant codes
+  only — no emails, names or plan file names (students name files after
+  themselves).
 
 - **Feature order is a contract.** Structural features must be defined identically at
   training and inference time. This has broken before. Never reorder or rename a feature
