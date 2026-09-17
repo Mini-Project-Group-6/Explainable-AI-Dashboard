@@ -448,15 +448,50 @@ def suggestions_for_criterion(explanation: CriterionExplanation,
     return found[:limit]
 
 
+def _directly_measured_healthy(criterion_key: str,
+                               feature_values: Optional[Mapping[str, float]]) -> bool:
+    """True when a feature that *directly* measures this criterion says it is fine.
+
+    Presence rules are a fallback for criteria the structural features cannot
+    speak to. Where a feature does measure the criterion and reports a healthy
+    value, that measurement is better evidence than a vocabulary check, and the
+    rule must yield to it.
+
+    Without this, the best plan in the corpus — 4/4 on every criterion, 100/100
+    overall, ``rpk_link_score`` at its maximum of 1.0 — was still told at high
+    priority to "state learners' relevant previous knowledge". The section
+    detector and the feature extractor recognise different vocabulary, and when
+    they disagree the *measured* one is the one the score was built from.
+    Contradicting your own score is the fastest way to lose a tutor's trust.
+    """
+    if not feature_values:
+        return False
+    for name, label in FEATURE_LABELS.items():
+        if label.primary_criterion != criterion_key or name not in feature_values:
+            continue
+        if not label.is_weak(float(feature_values[name])):
+            return True
+    return False
+
+
 def presence_suggestions(raw_text: str,
-                         missing_sections: Sequence[str] = ()) -> list[Suggestion]:
-    """Suggestions from what the plan does not contain at all."""
+                         missing_sections: Sequence[str] = (),
+                         feature_values: Optional[Mapping[str, float]] = None
+                         ) -> list[Suggestion]:
+    """Suggestions from what the plan does not contain at all.
+
+    ``feature_values`` is optional so existing callers keep working, but pass it
+    where you have it: it is what stops a rule contradicting a measurement.
+    """
     found: list[Suggestion] = []
     seen: set[str] = set()
 
     for section in missing_sections:
         key = SECTION_TO_CRITERION.get(section)
         if key is None or section not in SECTION_MESSAGES:
+            continue
+        if _directly_measured_healthy(key, feature_values):
+            seen.add(key)        # measured healthy: no presence rule for it
             continue
         target = criterion(key)
         found.append(Suggestion(
@@ -477,6 +512,8 @@ def presence_suggestions(raw_text: str,
             continue                     # already flagged by a missing section
         if rule.matches(raw_text):
             continue
+        if _directly_measured_healthy(rule.criterion_key, feature_values):
+            continue                     # the measurement outranks the lexicon
         target = criterion(rule.criterion_key)
         found.append(Suggestion(
             id=f"{target.id}.absent.{rule.criterion_key}",
@@ -525,7 +562,8 @@ def revision_suggestions(explanation: PlanExplanation,
     """
     collected: list[Suggestion] = []
     if format_recognised:
-        collected += presence_suggestions(raw_text, missing_sections)
+        collected += presence_suggestions(raw_text, missing_sections,
+                                          feature_values)
 
     for criterion_explanation in explanation.criteria:
         # A criterion with no trustworthy evidence channel gets presence rules

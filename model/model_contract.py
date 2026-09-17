@@ -148,12 +148,21 @@ class Criterion:
         return self.nts_indicator in _VERIFIED_NTS_CODES
 
 
-#: NTS indicator codes below are matched by *descriptor wording* against the
-#: National Teachers' Standards and still need one pass against the printed
-#: STS School Placement Handbook to confirm the letter suffixes. Add a code to
-#: this set once a human has confirmed it; ``unverified_criteria()`` reports
-#: the rest. The descriptors are the reliable anchor — match on those.
-_VERIFIED_NTS_CODES: Final[frozenset[str]] = frozenset()
+#: Verified 2026-08-10 against the published National Teachers' Standards for
+#: Ghana (2017), NTC, https://ntc.gov.gh/wp-content/uploads/2021/12/NTS.pdf —
+#: the full lettered list under Standard 2 (Professional Knowledge) and
+#: Standard 3 (Professional Practice) was extracted and each code matched to
+#: its indicator. All seven distinct codes used here are correct, and the
+#: ``nts_descriptor`` strings below were corrected to the document's verbatim
+#: wording at the same time (they had drifted to "learner" where the NTS says
+#: "student", among other paraphrases).
+#:
+#: Scope of this check: it confirms each code against the NTS itself, which is
+#: what the codes name. It does *not* renumber anything against the STS School
+#: Placement Handbook's own 25-item checklist — that is a separate numbering
+#: and is not what these codes refer to.
+_VERIFIED_NTS_CODES: Final[frozenset[str]] = frozenset(
+    {"2c", "3a", "3e", "3f", "3i", "3j", "3k"})
 
 NTS_SOURCE: Final[str] = (
     "National Teachers' Standards for Ghana (2017), as referenced by the STS "
@@ -167,7 +176,7 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         label="Learning outcomes",
         nts_indicator="3a",
         nts_descriptor=("Plans and delivers varied and challenging lessons, showing "
-                        "clear grasp of the intended outcomes of their teaching"),
+                        "a clear grasp of the intended outcomes of their teaching."),
         weight=RUBRIC_WEIGHTS["learning_outcomes"],
         plan_evidence="Objectives are specific, measurable and stated as learner outcomes.",
     ),
@@ -177,7 +186,8 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         label="Pedagogical content knowledge",
         nts_indicator="2c",
         nts_descriptor=("Has secure content knowledge, pedagogical knowledge and "
-                        "pedagogical content knowledge for the school and grade taught"),
+                        "pedagogical content knowledge for the school and grade "
+                        "they teach in."),
         weight=RUBRIC_WEIGHTS["pedagogical_content_knowledge"],
         plan_evidence="Core points are accurate, pitched to the grade, and anticipate misconceptions.",
     ),
@@ -186,8 +196,8 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         key="teaching_learning_strategies",
         label="Teaching and learning strategies",
         nts_indicator="3e",
-        nts_descriptor=("Employs a variety of instructional strategies that encourage "
-                        "learner participation and critical thinking"),
+        nts_descriptor=("Employs a variety of instructional strategies that "
+                        "encourages student participation and critical thinking."),
         weight=RUBRIC_WEIGHTS["teaching_learning_strategies"],
         plan_evidence="Varied, learner-centred activities rather than continuous exposition.",
     ),
@@ -196,8 +206,8 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         key="resources_including_ict",
         label="Resources including ICT",
         nts_indicator="3j",
-        nts_descriptor=("Produces and uses a variety of teaching and learning resources, "
-                        "including ICT, to enhance learning"),
+        nts_descriptor=("Produces and uses a variety of teaching and learning "
+                        "resources including ICT, to enhance learning."),
         weight=RUBRIC_WEIGHTS["resources_including_ict"],
         plan_evidence="Named, lesson-specific TLMs and any ICT use.",
     ),
@@ -207,7 +217,7 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         label="Assessment strategies in the plan",
         nts_indicator="3k",
         nts_descriptor=("Integrates a variety of assessment modes into teaching to "
-                        "support learning"),
+                        "support learning."),
         weight=RUBRIC_WEIGHTS["assessment_strategies_in_plan"],
         plan_evidence="Assessment items are present and test what the objectives promised.",
     ),
@@ -217,7 +227,7 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         label="Lesson introduction and RPK",
         nts_indicator="3a",
         nts_descriptor=("Plans and delivers varied and challenging lessons, showing "
-                        "clear grasp of the intended outcomes of their teaching"),
+                        "a clear grasp of the intended outcomes of their teaching."),
         weight=RUBRIC_WEIGHTS["lesson_introduction_rpk"],
         plan_evidence="Starter connects relevant previous knowledge to the new topic.",
     ),
@@ -227,7 +237,7 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         label="Lesson sequencing and timing",
         nts_indicator="3a",
         nts_descriptor=("Plans and delivers varied and challenging lessons, showing "
-                        "clear grasp of the intended outcomes of their teaching"),
+                        "a clear grasp of the intended outcomes of their teaching."),
         weight=RUBRIC_WEIGHTS["lesson_sequencing"],
         plan_evidence="Starter/main/plenary all present, ordered, and realistically timed.",
     ),
@@ -236,8 +246,8 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         key="attention_to_all_learners",
         label="Attention to all learners",
         nts_indicator="3f",
-        nts_descriptor=("Pays attention to all learners, especially girls and learners "
-                        "with Special Educational Needs, ensuring their progress"),
+        nts_descriptor=("Pays attention to all learners, especially girls and students "
+                        "with Special Educational Needs, ensuring their progress."),
         weight=RUBRIC_WEIGHTS["attention_to_all_learners"],
         plan_evidence="Differentiated tasks, SEN support, and equitable participation.",
     ),
@@ -246,7 +256,8 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         key="concept_explanation_examples",
         label="Concept explanation and examples",
         nts_indicator="3i",
-        nts_descriptor=("Explains concepts clearly using examples familiar to learners"),
+        nts_descriptor=("Explains concepts clearly using examples familiar to "
+                        "students."),
         weight=RUBRIC_WEIGHTS["concept_explanation_examples"],
         plan_evidence="Explanation strategy uses analogies/examples from the learners' context.",
     ),
@@ -256,7 +267,7 @@ CRITERIA: Final[tuple[Criterion, ...]] = (
         label="Lesson closure",
         nts_indicator="3a",
         nts_descriptor=("Plans and delivers varied and challenging lessons, showing "
-                        "clear grasp of the intended outcomes of their teaching"),
+                        "a clear grasp of the intended outcomes of their teaching."),
         weight=RUBRIC_WEIGHTS["lesson_closure"],
         plan_evidence="Plenary consolidates the indicator and checks attainment.",
     ),

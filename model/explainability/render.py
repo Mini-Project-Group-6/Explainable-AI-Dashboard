@@ -399,21 +399,27 @@ def st_waterfall(explanation, criterion_label: str = "") -> None:
     if criterion_label:
         figure.suptitle(criterion_label)
     figure.set_size_inches(9, 6)
-    st.pyplot(figure, use_container_width=True)
+    st.pyplot(figure, width="stretch")
     plt.close(figure)
 
 
 def st_force_plot(explanation, height: int = 180) -> None:
-    """Interactive SHAP force plot, embedded as a component."""
+    """Interactive SHAP force plot, embedded as a component.
+
+    Uses ``st.iframe`` rather than ``st.components.v1.html``, which Streamlit
+    deprecated with a removal date of 2026-06-01 — already past. ``st.iframe``
+    treats a string that is not a URL or file path as raw HTML, so the
+    JavaScript ``shap.getjs()`` emits still executes; ``st.html`` would not
+    work here, as it strips scripts.
+    """
     import streamlit as st
-    import streamlit.components.v1 as components
 
     import shap
 
     from explainability.shap_tree import force_plot_html
 
     visualiser = force_plot_html(explanation)
-    components.html(f"{shap.getjs()}{visualiser.html()}", height=height)
+    st.iframe(f"{shap.getjs()}{visualiser.html()}", height=height)
 
 
 def st_beeswarm(explanation, criterion_label: str = "") -> None:
@@ -431,7 +437,7 @@ def st_beeswarm(explanation, criterion_label: str = "") -> None:
     if criterion_label:
         figure.suptitle(criterion_label)
     figure.set_size_inches(9, 7)
-    st.pyplot(figure, use_container_width=True)
+    st.pyplot(figure, width="stretch")
     plt.close(figure)
 
 
@@ -477,7 +483,7 @@ def st_transparency_panel(artifacts: Optional[Artifacts] = None) -> None:
             }
             for item in CRITERIA
         ],
-        hide_index=True, use_container_width=True)
+        hide_index=True, width="stretch")
 
     gaps = uncovered_criteria()
     if gaps:
@@ -507,4 +513,4 @@ def st_transparency_panel(artifacts: Optional[Artifacts] = None) -> None:
             }
             for label in FEATURE_LABELS.values()
         ],
-        hide_index=True, use_container_width=True)
+        hide_index=True, width="stretch")

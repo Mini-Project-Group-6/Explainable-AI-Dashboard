@@ -33,6 +33,26 @@ MAIN_STAGES = ("introduction", "content", "activities", "assessment", "closure")
 # stages but their absence is exactly what the rubric penalises.
 EXPECTED_SECTIONS = ("objectives", "rpk", "resources", "differentiation") + MAIN_STAGES
 
+# Sections whose presence may be established from body prose as well as from a
+# header. The five MAIN_STAGES are structural — they carve the plan into the
+# blocks F15/F16 measure, so they only count when they head a block. But rpk,
+# resources and differentiation are *topics*, and a plan addresses them whether
+# or not it gives them a heading:
+#
+#     "Teacher reviews learners' previous knowledge of rainfall."
+#
+# That sentence, inside the introduction, is RPK. Requiring a header meant it
+# was reported missing, which fired a high-priority suggestion telling the
+# student teacher to add previous knowledge their plan already stated. That is
+# precisely the failure explainability/suggestions.py exists to avoid, and it
+# fired on our own synthetic corpus — so it would fire constantly on real CoE
+# plans, where RPK is usually prose in the introduction rather than a heading.
+#
+# Segmentation is deliberately NOT affected: which text lands in which section
+# is unchanged, because the trained features depend on it. Only the answer to
+# "did the plan address this at all?" changes.
+PROSE_DETECTABLE_SECTIONS = ("rpk", "resources", "differentiation")
+
 # Ordered: first matching pattern wins, so more specific headers
 # (e.g. "learner activities") must come before generic ones.
 SECTION_PATTERNS: list[tuple[str, re.Pattern]] = [
@@ -187,6 +207,25 @@ def _match_header(line: str) -> Optional[str]:
     return None
 
 
+def _addressed_in_prose(name: str, raw_text: str) -> bool:
+    """True if *name* is a topic the plan covers in prose, without a heading.
+
+    Only consulted for ``PROSE_DETECTABLE_SECTIONS``, and only after header
+    detection has already failed — so this can rescue a section from being
+    reported missing, never reassign any text.
+
+    Uses ``search`` against the same pattern ``_match_header`` uses with
+    ``match``: identical vocabulary, no second keyword list to drift out of
+    step with the first.
+    """
+    if name not in PROSE_DETECTABLE_SECTIONS:
+        return False
+    for section_name, pattern in SECTION_PATTERNS:
+        if section_name == name:
+            return bool(pattern.search(raw_text))
+    return False
+
+
 def segment_sections(raw_text: str) -> tuple[dict[str, str], list[str]]:
     """Split raw text into canonical sections by header keyword lines.
 
@@ -208,7 +247,8 @@ def segment_sections(raw_text: str) -> tuple[dict[str, str], list[str]]:
         sections.setdefault(current, []).append(line)
 
     joined = {name: "\n".join(lines).strip() for name, lines in sections.items()}
-    missing = [name for name in EXPECTED_SECTIONS if not joined.get(name)]
+    missing = [name for name in EXPECTED_SECTIONS
+               if not joined.get(name) and not _addressed_in_prose(name, raw_text)]
     for name in missing:
         logger.info("Section not found: %s", name)
     return joined, missing
